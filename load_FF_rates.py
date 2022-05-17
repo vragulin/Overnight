@@ -11,7 +11,7 @@ import numpy as np
 import fredpy as fp
 import matplotlib.pyplot as plt
 import pickle
-plt.style.use('classic')
+#plt.style.use('classic')
 
 
 FF_HIST_PICKLE = '../data/FF_hist.pickle'
@@ -48,8 +48,8 @@ def load_ff_from_FRED(reload=True, save=True):
 #%% Generate a history of FF Deposit cum returns (inverse discount factors)
 def gen_ff_returns(ff_series):
     """ Generate a series of cumulative returns on a Fed Funds deposit account
-    Parameters: ff_series : TYPE - pandas.series of Fed Funds rates
-    Returns: pandas series with cum return (future value) of a FF depo account
+        Parameters: ff_series : TYPE - pandas.series of Fed Funds rates
+        Returns: pandas series with cum return (future value) of a FF depo account
     """
 
     # FF use actual/360 convention
@@ -58,13 +58,13 @@ def gen_ff_returns(ff_series):
 #%% Generate periodic discount factor and cont. compounding returns
 def gen_period_returns(daily_cumrets, period='M', start=None, end=None):
     """ Generate a series of periodic cumulative and period returns on a Fed Funds deposit account
-    Parameters: 
-        daily_cumrets - pandas.series of Fed Funds cumulative returns
-        period - string code of period
-        start  - start date (if 'None', match daily_cumrets)
-        end    - end date (if 'None', match daily_cumrets)
-        
-    Returns: pandas series with cum return (future value) of a FF depo account
+        Parameters: 
+            daily_cumrets - pandas.series of Fed Funds cumulative returns
+            period - string code of period
+            start  - start date (if 'None', match daily_cumrets)
+            end    - end date (if 'None', match daily_cumrets)
+            
+        Returns: pandas series with cum return (future value) of a FF depo account
     """
     
     # Resample daily deposit factor to the desired frequency
@@ -72,6 +72,8 @@ def gen_period_returns(daily_cumrets, period='M', start=None, end=None):
     cumrets = daily_cumrets.resample(period).last()
     df = pd.DataFrame(cumrets)
     df.columns = ['Cum_Rets']
+
+    df['Rets'] = np.log(df.Cum_Rets).diff()
 
     # Select only data within the desired period
     if start:
@@ -81,20 +83,44 @@ def gen_period_returns(daily_cumrets, period='M', start=None, end=None):
             df = df[start:]
     else:
         if end:
-            df = df[:end]
+            df = df[:end]    
 
+    # Normalize cumulative returns to start from 1
     df.Cum_Rets = df.Cum_Rets / df.Cum_Rets.iloc[0]    
-    df['Rets'] = np.log(df.Cum_Rets).diff()
+            
+    return df
+
+#%% Combine loading, calculating returns and resampling into a single function
+def load_FF_period_rets(reload=True, save=True, period='M', start=None, end=None):
+    """ Combine the 3 functons above
+        Parameters:
+            reload - if True from FRED, else from pickle
+            save - save new result to pickle if reload=True
+            period - string code of period
+            start  - start date (if 'None', match daily_cumrets)
+            end    - end date (if 'None', match daily_cumrets)
+        Returns: pandas series with cum return (future value) of a FF depo account            
+    """
+    
+    # Load FF
+    ff_series = load_ff_from_FRED(reload=reload, save=save)
+    
+    # Generate cumulative returns (value of a FF deposit account)
+    rets = gen_ff_returns(ff_series)
+
+    # Generate cumulative and incremental returns with desired frequency and date range
+    df = gen_period_returns(rets, period='M', start='1993-01-01', end=None)
     
     return df
-     
+    
 # =============================================================================
 # Start of Main
 # =============================================================================
 if __name__ == "__main__":
     
     # Load FF
-    ff_series = load_ff_from_FRED(reload=False)
+    reload = False
+    ff_series = load_ff_from_FRED(reload=reload)
     
     print(ff_series.head())
     print(ff_series.tail())
@@ -110,9 +136,13 @@ if __name__ == "__main__":
     plt.show()
     
     # Test function of generating periodic returns
-    df = gen_period_returns(rets, period='M', start='1993-01-01', end=None)
+    start='2021-01-01'
+    df = gen_period_returns(rets, period='M', start=start, end=None)
     print(df.head())
     print(df.tail())
     
-    
+    #Test function that does everything together
+    df1 = load_FF_period_rets(reload=reload, save=False, start=start)
+    print(df1.head())
+    print(df1.tail())
     
