@@ -26,10 +26,10 @@ def init_sim_params():
     params = {}
     params['rebuild'      ] = False #Regenerate stock return files
     params['window'       ] = 24  #window in months for the return calculation
-    params['trx_costs'    ] = 2  #one-way trading costs in bp
-    params['borrow_fee'   ] = 50  #borrow fee on the shorts, in bp per annum
+    params['trx_costs'    ] = 0  #one-way trading costs in bp
+    params['borrow_fee'   ] = 0  #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
-    params['trade_pctiles'] = [10, 90]  #Sell and buy  thresholds for shorts/longs portfolios
+    params['trade_pctiles'] = [20, 80]  #Sell and buy  thresholds for shorts/longs portfolios
 
     return params
 
@@ -128,7 +128,7 @@ def gen_positions(df_sort, sim_params):
     return positions, thresholds
     
 #%% Calculate portfolio returns from positions and stock returns
-def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
+def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
     """ Calculate portfolio returns
         Parameters:
             pos      - dataframe of positions for each period
@@ -136,6 +136,8 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
             ret_full - dataframe of full day returns
             riskfree - risk-free rate returns (same index as other dataframes)
             params   - dictionary with parameters
+            intra    - boolean, True is the strategy does not hold positions overnight
+            
         Return: pandas dataframe 
     """
 
@@ -175,9 +177,17 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
         stock_r = pos_row * ret_row
         
         port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()
-        port_r.loc[date,'r_s' ]   = stock_r[short_mask].mean() + riskfree.loc[date,'Rets'] * 2
+
+        if not intra:  #if we hold positions overnight
+            port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()
+            port_r.loc[date,'r_s' ]   = stock_r[short_mask].mean() + riskfree.loc[date,'Rets'] * 2
+            port_r.loc[date,'r_ix']   = ret_row[~zero_mask].mean()
+        else:  #no positions overnight - pay no interest or borrow fees
+            port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()  + riskfree.loc[date,'Rets']           
+            port_r.loc[date,'r_s' ]   = stock_r[short_mask].mean() + riskfree.loc[date,'Rets'] 
+            port_r.loc[date,'r_ix']   = ret_row[~zero_mask].mean() + riskfree.loc[date,'Rets'] 
+            
         port_r.loc[date,'r_ls']   = port_r.loc[date,'r_l'] + port_r.loc[date,'r_s']
-        port_r.loc[date,'r_ix']   = ret_row[~zero_mask].mean()
         
         # Index buy-and-hold return - subtract initial transactions costs, otherwise assume no rebal
         # Only consider stocks for which we have returns (i.e. ones that trade)
@@ -187,11 +197,18 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
         # Position changes
         stock_r_net     = stock_r - trx_costs * 2 / 10000
 
-        port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()
-        port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] * 2 \
-                                        - borrow_fee / 12 / 10000
-        port_r_net.loc[date,'r_ls'] = port_r_net.loc[date,'r_l'] + port_r_net.loc[date,'r_s']
+        if not intra:
+            port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()
+            port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] * 2 \
+                                            - borrow_fee / 12 / 10000
+
+        else: #no positions overnight - pay no interest or borrow fees
+            port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()  + riskfree.loc[date,'Rets'] 
+            port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] 
+                                        
+
         port_r_net.loc[date,'r_ix'] = port_r.loc[date,'r_ix'] - trx_costs * 2 / 10000
+        port_r_net.loc[date,'r_ls'] = port_r_net.loc[date,'r_l'] + port_r_net.loc[date,'r_s']
     
         # Index buy-and-hold return
         if t == window:
@@ -217,7 +234,7 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
         title_log_str  = ""
 
     # Set up labels for the plot    
-    legend_template = ['Long {}','Short {}','L/S {}', 'Index {}', 'Index BH']
+    legend_template = ['Long {}','Short {}','L/S {}', 'Index {}', 'Index BuyHold']
     linestyles  = ['-','-','-', ':',':']
     
     
@@ -366,7 +383,7 @@ if __name__ == "__main__":
 
     # Calculate portfolio monthly and cumulative returns, with and w/o trans costs
     port_o, port_o_net = calc_portfolio_returns(positions, df_o, df_f, riskfree, sim)
-    port_i, port_i_net = calc_portfolio_returns(positions, df_i, df_f, riskfree, sim)
+    port_i, port_i_net = calc_portfolio_returns(positions, df_i, df_f, riskfree, sim, intra=True)
    
     
     #%% Plot returns for the overnight holding strategy
