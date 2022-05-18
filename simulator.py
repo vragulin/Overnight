@@ -29,7 +29,7 @@ def init_sim_params():
     params['trx_costs'    ] = 2  #one-way trading costs in bp
     params['borrow_fee'   ] = 50  #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
-    params['trade_pctiles'] = [10, 90]  #Sell and buy  thresholds for shorts/longs portfolios
+    params['trade_pctiles'] = [20, 80]  #Sell and buy  thresholds for shorts/longs portfolios
 
     return params
 
@@ -220,8 +220,17 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     legend_template = ['Long {}','Short {}','L/S {}', 'Index {}', 'Index BH']
     linestyles  = ['-','-','-', ':',':']
     
-    title_string = "Equity Curves {} - {} - {}\nTop/Bottom Quintiles on Trailing (O/N-Intraday), {}"\
-                    .format(title_log_str, title_codes[2], title_codes[0], title_codes[1])
+    
+    if sim['trade_pctiles'][0] == 20:
+        pctile_str = "Top/Bottom Quintiles"
+    elif sim['trade_pctiles'][0] == 10:
+        pctile_str = "Top/Bottom Deciles"
+    else:
+        pctile_str = "{}/{} Quantiles".format(*sim['trade_pctiles'])
+        
+    title_string = "Equity Curves {} - {} - {}\n{} on Trailing (O/N-Intraday), {}"\
+                    .format(title_log_str, title_codes[2], title_codes[0], \
+                            pctile_str, title_codes[1])
     
     if use_log:
         _ = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
