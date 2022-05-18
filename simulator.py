@@ -164,11 +164,12 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
         # Extract position and return rows
         pos_row = pos.iloc[t-1,:]
         ret_row = ret_s.iloc[t,:]
+        ret_full_row = ret_full_s.iloc[t,:]
 
         # Identify long and short stocks, and stocks with missing data
         long_mask  = ( pos_row ==  1 )
         short_mask = ( pos_row == -1 )
-        zero_mask  = ( ret_row ==  0 )
+        zero_mask  = ( ret_row ==  0 ) & (ret_full_row == 0)
         
         # Gross returns - first on each stock, then on long/sort portfolio
         stock_r = pos_row * ret_row
@@ -180,7 +181,6 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
         
         # Index buy-and-hold return - subtract initial transactions costs, otherwise assume no rebal
         # Only consider stocks for which we have returns (i.e. ones that trade)
-        ret_full_row = ret_full_s.iloc[t,:]
         port_r.loc[date,'r_ix_f'] = ret_full_row[~zero_mask].mean()
 
         # Caclulate net returns - assume we trade 2x per day on each position
