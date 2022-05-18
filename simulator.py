@@ -29,7 +29,7 @@ def init_sim_params():
     params['trx_costs'    ] = 2  #one-way trading costs in bp
     params['borrow_fee'   ] = 50  #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
-    params['trade_pctiles'] = [20, 80]  #Sell and buy  thresholds for shorts/longs portfolios
+    params['trade_pctiles'] = [10, 90]  #Sell and buy  thresholds for shorts/longs portfolios
 
     return params
 
@@ -373,12 +373,12 @@ if __name__ == "__main__":
     use_log = False
  
     # Before 2015
-    r_o_pre  = plot_sim_returns(port_o_net, end='2014-12-31', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
-    r_i_pre  = plot_sim_returns(port_i_net, end='2014-12-31', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
+    r_o_pre  = plot_sim_returns(port_o_net, end='2015-01-01', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
+    r_i_pre  = plot_sim_returns(port_i_net, end='2015-01-01', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
     
     # After 2015
-    r_o_post = plot_sim_returns(port_o_net, start='2014-12-31', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
-    r_i_post = plot_sim_returns(port_i_net, start='2014-12-31', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
+    r_o_post = plot_sim_returns(port_o_net, start='2015-01-01', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
+    r_i_post = plot_sim_returns(port_i_net, start='2015-01-01', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
 
     #%% Analyze the cumulative return time series     
     df_stats = gen_summary_report()
