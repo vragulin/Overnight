@@ -382,8 +382,8 @@ if __name__ == "__main__":
     positions, _  = gen_positions(df_obp, sim) 
 
     # Calculate portfolio monthly and cumulative returns, with and w/o trans costs
-    port_o, port_o_net = calc_portfolio_returns(positions, df_o, df_f, riskfree, sim)
-    port_i, port_i_net = calc_portfolio_returns(positions, df_i, df_f, riskfree, sim, intra=True)
+    port_o, port_o_net = calc_portfolio_returns( positions, df_o, df_f, riskfree, sim)
+    port_i, port_i_net = calc_portfolio_returns(-positions, df_i, df_f, riskfree, sim, intra=True)
    
     
     #%% Plot returns for the overnight holding strategy
