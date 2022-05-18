@@ -29,7 +29,7 @@ def init_sim_params():
     params['trx_costs'    ] = 2  #one-way trading costs in bp
     params['borrow_fee'   ] = 50  #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
-    params['trade_pctiles'] = [20, 80]  #Sell and buy  thresholds for shorts/longs portfolios
+    params['trade_pctiles'] = [10, 90]  #Sell and buy  thresholds for shorts/longs portfolios
 
     return params
 
@@ -209,9 +209,9 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     
     # Cumulative returns
     ret_cum     = (1+ret1).cumprod()
-    
+    rln_cum     =  np.log(ret_cum)
+
     if use_log:
-        ret_cum     = np.log(ret_cum)
         title_log_str  = "(Log) "
     else:
         title_log_str  = ""
@@ -223,7 +223,11 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     title_string = "Equity Curves {} - {} - {}\nTop/Bottom Quintiles on Trailing (O/N-Intraday), {}"\
                     .format(title_log_str, title_codes[2], title_codes[0], title_codes[1])
     
-    _ = ret_cum.plot(title = title_string, style=linestyles, fontsize='small')
+    if use_log:
+        _ = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
+    else:
+        capital = sim['capital']
+        _ = (ret_cum*capital).plot(title = title_string, style=linestyles, fontsize='small', logy=True)
 
     if title_codes[0] == 'Overnight':
         period_label = 'O/N'
@@ -234,7 +238,8 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     plt.legend(legend_list)
     plt.show()
     
-    return ret_cum
+    # Return cumulative log returns
+    return rln_cum
 
 #%% Generate time series statistics
 def get_time_series_stats(rets, riskfree, annualize = True):
@@ -265,6 +270,7 @@ def get_time_series_stats(rets, riskfree, annualize = True):
 #%% Generate summary report
 def gen_summary_report():
     """ Don't pass any parameters, get all info from the namespace
+        Assume that the global namespace contains frames referenced below with cumulative strategy returns
     """
     
     # Set up a dataframe to hold the results
@@ -353,13 +359,15 @@ if __name__ == "__main__":
    
     
     #%% Plot returns for the overnight holding strategy
+    use_log = False
+ 
     # Before 2015
-    r_o_pre  = plot_sim_returns(port_o_net, end='2015-01-01', title_codes = ['Overnight','Net', 'Pre-2015']) 
-    r_i_pre  = plot_sim_returns(port_i_net, end='2015-01-01', title_codes = ['Intraday', 'Net', 'Pre-2015']) 
+    r_o_pre  = plot_sim_returns(port_o_net, end='2015-01-01', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
+    r_i_pre  = plot_sim_returns(port_i_net, end='2015-01-01', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
     
     # After 2015
-    r_o_post = plot_sim_returns(port_o_net, start='2015-01-01', title_codes = ['Overnight','Net', 'Post-2015']) 
-    r_i_post = plot_sim_returns(port_i_net, start='2015-01-01', title_codes = ['Intraday', 'Net', 'Post-2015']) 
+    r_o_post = plot_sim_returns(port_o_net, start='2015-01-01', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
+    r_i_post = plot_sim_returns(port_i_net, start='2015-01-01', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
 
     #%% Analyze the cumulative return time series     
     df_stats = gen_summary_report()
