@@ -205,7 +205,7 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params):
 def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     
     # Extract returns over the focus period
-    ret1     = ret[start:end]
+    ret1     = ret[start:end].dropna()
     
     # Cumulative returns
     ret_cum     = (1+ret1).cumprod()
@@ -233,10 +233,10 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
                             pctile_str, title_codes[1])
     
     if use_log:
-        _ = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
+        ax = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
     else:
         capital = sim['capital']
-        _ = (ret_cum*capital).plot(title = title_string, style=linestyles, fontsize='small', logy=True)
+        ax = (ret_cum*capital).plot(title = title_string, style=linestyles, fontsize='small', logy=True)
 
     if title_codes[0] == 'Overnight':
         period_label = 'O/N'
@@ -244,7 +244,9 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
         period_label = 'Intra'
         
     legend_list = [ x.format(period_label) for x in legend_template ] 
-    plt.legend(legend_list)
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Capital $", fontsize='small')
+    ax.set_xlabel("Date", fontsize='small')
     plt.show()
     
     # Return cumulative log returns
@@ -371,12 +373,12 @@ if __name__ == "__main__":
     use_log = False
  
     # Before 2015
-    r_o_pre  = plot_sim_returns(port_o_net, end='2015-01-01', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
-    r_i_pre  = plot_sim_returns(port_i_net, end='2015-01-01', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
+    r_o_pre  = plot_sim_returns(port_o_net, end='2014-12-31', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
+    r_i_pre  = plot_sim_returns(port_i_net, end='2014-12-31', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
     
     # After 2015
-    r_o_post = plot_sim_returns(port_o_net, start='2015-01-01', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
-    r_i_post = plot_sim_returns(port_i_net, start='2015-01-01', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
+    r_o_post = plot_sim_returns(port_o_net, start='2014-12-31', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
+    r_i_post = plot_sim_returns(port_i_net, start='2014-12-31', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
 
     #%% Analyze the cumulative return time series     
     df_stats = gen_summary_report()
