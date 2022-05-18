@@ -24,12 +24,12 @@ MONTHLY_FIELD_DF    = "../data/monthly_{field}.pickle"
 def init_sim_params():
     """ Initialize Sim Params, return dictionary"""
     params = {}
-    params['rebuild'      ] = False #Regenerate stock return files
-    params['window'       ] = 24  #window in months for the return calculation
-    params['trx_costs'    ] = 0  #one-way trading costs in bp
-    params['borrow_fee'   ] = 0  #borrow fee on the shorts, in bp per annum
+    params['rebuild'      ] = False    #Regenerate stock return files
+    params['window'       ] = 24       #window in months for the return calculation
+    params['trx_costs'    ] = 1        #one-way trading costs in bp
+    params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
-    params['trade_pctiles'] = [20, 80]  #Sell and buy  thresholds for shorts/longs portfolios
+    params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
 
     return params
 
@@ -193,9 +193,9 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
         # Only consider stocks for which we have returns (i.e. ones that trade)
         port_r.loc[date,'r_ix_f'] = ret_full_row[~zero_mask].mean()
 
-        # Caclulate net returns - assume we trade 2x per day on each position
+        # Caclulate net returns - assume we trade 2x per day on each position, 21.6 trading days per month
         # Position changes
-        stock_r_net     = stock_r - trx_costs * 2 / 10000
+        stock_r_net     = stock_r - trx_costs * 2 * 21.6 / 10000
 
         if not intra:
             port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()
@@ -340,7 +340,7 @@ def gen_summary_report():
         # Pick the series with the buy-and-hold index return
         s_name = 'Index'
         s_col  = 'r_ix_f'
-        window = 'BH'
+        window = 'BuyHold'
         
         # Pick a return series out of an input simulation dataframe
         s = frame[s_col]
