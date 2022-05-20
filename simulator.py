@@ -13,6 +13,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import load_FF_rates as ff
+import os
 
 #%% Global variables - file locations
 TICKER_FILE         = "../data/sp500tickers.pickle"
@@ -30,6 +31,7 @@ def init_sim_params():
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1000000  #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
+    params['gross'        ] = False    #Whether to producec graphs and reports for gross or net returns
 
     return params
 
@@ -303,7 +305,7 @@ def gen_summary_report():
     
     # Set up a dataframe to hold the results
     df_stats = pd.DataFrame(np.nan, index=range(18), \
-                            columns = ['Period', 'Window', 'Series', 'Mean Ret', 'Geom Ret', 'Vol', 'Sharpe'])
+                            columns = ['Period', 'Window', 'Series', 'Costs', 'Mean Ret', 'Geom Ret', 'Vol', 'Sharpe'])
     
     # Set up iterables
     frames  = [ r_o_pre  ,  r_i_pre  ,  r_o_post,    r_i_post   ]
@@ -312,7 +314,7 @@ def gen_summary_report():
     
     series_names = ['Long', 'Short', 'L/S' , 'Index']
     col_names    = ['r_l' , 'r_s'  , 'r_ls', 'r_ix' ]
-    stats_names  = df_stats.columns[3:]
+    stats_names  = df_stats.columns[4:]
     
     i = 0
     for frame, period, window in zip(frames, periods, windows):
@@ -355,6 +357,9 @@ def gen_summary_report():
         # Increment row counter
         i += 1            
     
+    # Populate the Costs (Gross/Net) column
+    df_stats['Costs'] = "Gross" if sim['gross'] else "Net"
+    
     # Print results
     print(df_stats)
         
@@ -372,6 +377,7 @@ if __name__ == "__main__":
     df_i = load_monthly_df(field = 'r_intr', rebuild=sim['rebuild'])
     df_f = df_o + df_i #full day return
  
+    
     # Load Fed Funds returns (the risk-free rate)
     riskfree  = ff.load_FF_period_rets(reload=sim['rebuild'],start=df_o.index[0],end=df_o.index[-1])
     
@@ -388,18 +394,33 @@ if __name__ == "__main__":
     
     #%% Plot returns for the overnight holding strategy
     use_log = False
+    costs   = "Gross" if sim['gross'] else "Net"
  
+    if costs == "Net":
+        port_o_used = port_o_net
+        port_i_used = port_i_net
+    else:
+        port_o_used = port_o
+        port_i_used = port_i
+        
     # Before 2015
-    r_o_pre  = plot_sim_returns(port_o_net, end='2015-01-01', title_codes = ['Overnight','Net', 'Pre-2015'], use_log = use_log) 
-    r_i_pre  = plot_sim_returns(port_i_net, end='2015-01-01', title_codes = ['Intraday', 'Net', 'Pre-2015'], use_log = use_log) 
+    r_o_pre  = plot_sim_returns(port_o_used, end='2015-01-01', title_codes = ['Overnight', costs, '1995-2015'], use_log = use_log) 
+    r_i_pre  = plot_sim_returns(port_i_used, end='2015-01-01', title_codes = ['Intraday',  costs, '1995-2015'], use_log = use_log) 
     
     # After 2015
-    r_o_post = plot_sim_returns(port_o_net, start='2015-01-01', title_codes = ['Overnight','Net', 'Post-2015'], use_log = use_log) 
-    r_i_post = plot_sim_returns(port_i_net, start='2015-01-01', title_codes = ['Intraday', 'Net', 'Post-2015'], use_log = use_log) 
+    r_o_post = plot_sim_returns(port_o_used, start='2015-01-01', title_codes = ['Overnight', costs, '2015-2022'], use_log = use_log) 
+    r_i_post = plot_sim_returns(port_i_used, start='2015-01-01', title_codes = ['Intraday',  costs, '2015-2022'], use_log = use_log) 
 
     #%% Analyze the cumulative return time series     
     df_stats = gen_summary_report()
-    
     df_stats.to_clipboard()
+    
+    #%% Save structures to pickle files
+    pickle_dir = '../../data'
+    
+    df_stats.to_pickle(os.path.join(pickle_dir,"df_stats.p"))   
+    positions.to_pickle(os.path.join(pickle_dir,"positions.p"))
+    
+    
     print("Done")
     
