@@ -21,6 +21,7 @@ TICKER_FILE         = "../data/sp500tickers.pickle"
 ALL_STOCKS_DF       = "../data/all_stocks_px_ret.pickle"
 STOCK_DFS_DIR       = "../stock_dfs"
 MONTHLY_FIELD_DF    = "../data/monthly_{field}.pickle"
+TD_PER_MONTH        = 21.6 #numbe of trading days per month
 
 #%% Initialize Simulation Parameters
 def init_sim_params():
@@ -32,7 +33,7 @@ def init_sim_params():
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1        #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
-    params['gross'        ] = False    #Whether to producec graphs and reports for gross or net returns
+    params['gross'        ] = True     #Whether to producec graphs and reports for gross or net returns
 
     return params
 
@@ -141,7 +142,7 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
             params   - dictionary with parameters
             intra    - boolean, True is the strategy does not hold positions overnight
             
-        Return: pandas dataframe 
+        Return: pandas dataframe  of simple returns
     """
 
     # Unpack parameters
@@ -198,7 +199,7 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
 
         # Caclulate net returns - assume we trade 2x per day on each position, 21.6 trading days per month
         # Position changes
-        stock_r_net     = stock_r - trx_costs * 2 * 21.6 / 10000
+        stock_r_net     = stock_r - trx_costs * 2 * TD_PER_MONTH / 10000
 
         if not intra:
             port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()
@@ -210,7 +211,7 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
             port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] 
                                         
 
-        port_r_net.loc[date,'r_ix'] = port_r.loc[date,'r_ix'] - trx_costs * 2 / 10000
+        port_r_net.loc[date,'r_ix'] = port_r.loc[date,'r_ix'] - trx_costs * 2 * TD_PER_MONTH / 10000
         port_r_net.loc[date,'r_ls'] = port_r_net.loc[date,'r_l'] + port_r_net.loc[date,'r_s']
     
         # Index buy-and-hold return
@@ -333,23 +334,29 @@ def get_time_series_stats(rets, riskfree, annualize = True):
         Params: rets     - pandas series exponential period returns
                 riskfree - pandas series of exponential riskfree returns
                 
-        Output: tuple: Mean Ret, Geom Ret, Vol, Sharpe
+        Output: tuple: Mean Ret, Geom Ret, Vol, Sharpe - all annualized
     """
     
     # Calculate a series of excess return
     xret   = rets - riskfree
-    xret_s = np.exp(xret) - 1
     
+    # Simple mean return
+    xret_s = np.exp(xret) - 1      
     xr_mean   = xret_s.mean()
-    xr_geom   = np.exp(xret.mean()) - 1
-    xr_vol    = xret.std()
-    xr_sharpe = xr_mean / xr_vol
     
+    # Geometric return (aka CAGR)
+    xr_geom   = np.exp(xret.mean()) - 1
+
+    # Volatility
+    xr_vol    = xret.std()
+    
+    # If required convert from monthly to annual
     if annualize:
         xr_mean   *= 12
         xr_geom   *= 12
         xr_vol    *= np.sqrt(12)
-        xr_sharpe *= np.sqrt(12)
+
+    xr_sharpe = xr_mean / xr_vol
         
     return xr_mean, xr_geom, xr_vol, xr_sharpe
     
@@ -436,8 +443,8 @@ def gen_table_for_paper():
     periods = ['Pre-2015', 'Pre-2015', 'Post-2015', 'Post-2015', 'Full',   'Full'   ]
     windows = ['O/N'     , 'Intra'   , 'O/N'      , 'Intra'    , 'O/N',    'Intra'  ]
     
-    series_names = ['Long', 'Short', 'L/S' , 'Index']
-    col_names    = ['r_l' , 'r_s'  , 'r_ls', 'r_ix' ]
+    series_names = ['Long', 'Short', 'L/S' , 'Index', 'Idx_BuyHold']
+    col_names    = ['r_l' , 'r_s'  , 'r_ls', 'r_ix' , 'r_ix_f']
     stats_names  = df_stats.columns[4:]
     
     i = 0
@@ -459,7 +466,7 @@ def gen_table_for_paper():
             i += 1            
             
     # Add rows for the index buy and hold returns
-    for j in [0,2]:
+    for j in [0,2,4]:
         
         frame, period = frames[j], periods[j]
         
