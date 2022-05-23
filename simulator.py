@@ -12,6 +12,7 @@ import pandas as pd
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 import load_FF_rates as ff
 import os
 
@@ -27,9 +28,9 @@ def init_sim_params():
     params = {}
     params['rebuild'      ] = False    #Regenerate stock return files
     params['window'       ] = 24       #window in months for the return calculation
-    params['trx_costs'    ] = 1        #one-way trading costs in bp
+    params['trx_costs'    ] = 0.5        #one-way trading costs in bp
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
-    params['capital'      ] = 1000000  #initial capital
+    params['capital'      ] = 1        #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
     params['gross'        ] = False    #Whether to producec graphs and reports for gross or net returns
 
@@ -271,6 +272,61 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
     # Return cumulative log returns
     return rln_cum
 
+#%% Generate cumulative return plots
+def plot_for_paper(ret, use_log=True, start=None, end=None, title_codes=None):
+    
+    # Extract returns over the focus period
+    ret1     = ret[start:end].dropna()
+    
+    # Cumulative returns
+    ret_cum     = (1+ret1).cumprod()
+    rln_cum     =  np.log(ret_cum)
+
+    if use_log:
+        title_log_str  = "(Log) "
+    else:
+        title_log_str  = ""
+
+    # Set up labels for the plot    
+    legend_template = ['Long {}','Short {}','L/S {}', 'Index {}', 'Index BuyHold']
+    linestyles  = ['-','-','-', ':',':']
+    
+    
+    if sim['trade_pctiles'][0] == 20:
+        pctile_str = "Top/Bottom Quintiles"
+    elif sim['trade_pctiles'][0] == 10:
+        pctile_str = "Top/Bottom Deciles"
+    else:
+        pctile_str = "{}/{} Quantiles".format(*sim['trade_pctiles'])
+        
+    title_string = "Value of $1 Invested {} - {} - {}\n{} on Trailing 2y [O/N-Intraday], {}"\
+                    .format(title_log_str, title_codes[2], title_codes[0], \
+                            pctile_str, title_codes[1])
+    
+    if use_log:
+        ax = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
+    else:
+        capital = sim['capital']
+        ax = (ret_cum*capital).plot(title = title_string, style=linestyles, fontsize='small', logy=True)
+
+    if title_codes[0] == 'Overnight':
+        period_label = 'O/N'
+    else:
+        period_label = 'Intra'
+        
+    legend_list = [ x.format(period_label) for x in legend_template ] 
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Capital $", fontsize='small')
+    #ax.set_xlabel("Date", fontsize='small')
+    ax.set_xlabel(None)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('$%.1f'))
+    #for label in ax.get_xticklabels(which='major'):
+    #    label.set(rotation=30)
+    plt.show()
+    
+    # Return cumulative log returns
+    return rln_cum
+
 #%% Generate time series statistics
 def get_time_series_stats(rets, riskfree, annualize = True):
     """ Generate descriptive statistics for a time series
@@ -364,7 +420,74 @@ def gen_summary_report():
     print(df_stats)
         
     return df_stats         
+
+#%% Generate a bespoke table for the paper (based on gen_summary_report, but with modifications)    
+def gen_table_for_paper():
+    """ Don't pass any parameters, get all info from the namespace
+        Assume that the global namespace contains frames referenced below with cumulative strategy returns
+    """
     
+    # Set up a dataframe to hold the results
+    df_stats = pd.DataFrame(np.nan, index=range(18), \
+                            columns = ['Period', 'Window', 'Series', 'Costs', 'Mean Ret', 'Geom Ret', 'Vol', 'Sharpe'])
+    
+    # Set up iterables
+    frames  = [ r_o_pre  ,  r_i_pre  ,  r_o_post,    r_i_post,   r_o_full, r_i_full ]
+    periods = ['Pre-2015', 'Pre-2015', 'Post-2015', 'Post-2015', 'Full',   'Full'   ]
+    windows = ['O/N'     , 'Intra'   , 'O/N'      , 'Intra'    , 'O/N',    'Intra'  ]
+    
+    series_names = ['Long', 'Short', 'L/S' , 'Index']
+    col_names    = ['r_l' , 'r_s'  , 'r_ls', 'r_ix' ]
+    stats_names  = df_stats.columns[4:]
+    
+    i = 0
+    for frame, period, window in zip(frames, periods, windows):
+        # Add 'active' strategy returns
+        for s_name, s_col in zip(series_names, col_names):
+            
+            # Pick a return series out of an input simulation dataframe
+            s = frame[s_col]
+                        
+            # Calculate stats for the return series (need to diff since s is cumulative)
+            stats = get_time_series_stats(s.diff(), riskfree['Rets'])
+            
+            # Populat a row  in the summary dataframe
+            df_stats.loc[i, ['Period', 'Window', 'Series']] = [period, window, s_name]
+            df_stats.loc[i, stats_names] = stats
+            
+            # Increment row counter
+            i += 1            
+            
+    # Add rows for the index buy and hold returns
+    for j in [0,2]:
+        
+        frame, period = frames[j], periods[j]
+        
+        # Pick the series with the buy-and-hold index return
+        s_name = 'Index'
+        s_col  = 'r_ix_f'
+        window = 'BuyHold'
+        
+        # Pick a return series out of an input simulation dataframe
+        s = frame[s_col]
+    
+         # Calculate stats for the return series (need to diff since s is cumulative)
+        stats = get_time_series_stats(s.diff(), riskfree['Rets'])
+         
+        # Populate a row  in the summary dataframe
+        df_stats.loc[i, ['Period', 'Window', 'Series']] = [period, window, s_name]
+        df_stats.loc[i, stats_names] = stats
+         
+        # Increment row counter
+        i += 1            
+    
+    # Populate the Costs (Gross/Net) column
+    df_stats['Costs'] = "Gross" if sim['gross'] else "Net"
+    
+    # Print results
+    print(df_stats)
+        
+    return df_stats             
     
 #%% Start of the main program
 if __name__ == "__main__":
@@ -411,16 +534,28 @@ if __name__ == "__main__":
     r_o_post = plot_sim_returns(port_o_used, start='2015-01-01', title_codes = ['Overnight', costs, '2015-2022'], use_log = use_log) 
     r_i_post = plot_sim_returns(port_i_used, start='2015-01-01', title_codes = ['Intraday',  costs, '2015-2022'], use_log = use_log) 
 
+    # Customizer plot for the paper
+    report_for_paper = True
+    if report_for_paper:
+        r_o_full  = plot_for_paper(port_o_used, title_codes = ['Overnight', costs, '1995-2022'], use_log = use_log) 
+        r_i_full  = plot_for_paper(port_i_used, title_codes = ['Intraday',  costs, '1995-2022'], use_log = use_log) 
+
+
     #%% Analyze the cumulative return time series     
-    df_stats = gen_summary_report()
-    df_stats.to_clipboard()
+    
+    if report_for_paper:
+        df_stats = gen_table_for_paper()
+        fname = "df_stats_paper.p"
+    else:
+        df_stats = gen_summary_report()
+        fname = "df_paper.p"
     
     #%% Save structures to pickle files
-    pickle_dir = '../../data'
+    pickle_dir = '../data'
     
-    df_stats.to_pickle(os.path.join(pickle_dir,"df_stats.p"))   
-    positions.to_pickle(os.path.join(pickle_dir,"positions.p"))
-    
+    df_stats.to_pickle(os.path.join(pickle_dir,fname))   
+    df_stats.to_clipboard()
+   
     
     print("Done")
     
