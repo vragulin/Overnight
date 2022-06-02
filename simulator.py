@@ -7,13 +7,17 @@ Simulate a strategy of going long/short portfolio of top/bottom deciles based on
 @author: vragu
 """
 
+#%% Load modules
 #import os
 import pandas as pd
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+import matplotlib.ticker as mtick
 import load_FF_rates as ff
+from datetime import timedelta
+import datetime as dt
 import os
 
 #%% Global variables - file locations
@@ -21,6 +25,7 @@ TICKER_FILE         = "../data/sp500tickers.pickle"
 ALL_STOCKS_DF       = "../data/all_stocks_px_ret.pickle"
 STOCK_DFS_DIR       = "../stock_dfs"
 MONTHLY_FIELD_DF    = "../data/monthly_{field}.pickle"
+HIST_MCAP_FILE      = "../data/mkt_caps_over_time.pickle"
 TD_PER_MONTH        = 21.6 #numbe of trading days per month
 
 #%% Initialize Simulation Parameters
@@ -29,12 +34,19 @@ def init_sim_params():
     params = {}
     params['rebuild'      ] = False    #Regenerate stock return files
     params['window'       ] = 24       #window in months for the return calculation
-    params['trx_costs'    ] = 0.5        #one-way trading costs in bp
+    params['trx_costs'    ] = 0.5      #one-way trading costs in bp
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1        #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
-    params['gross'        ] = True     #Whether to producec graphs and reports for gross or net returns
+    params['gross'        ] = False     #Whether to producec graphs and reports for gross or net returns
+    params['cap_weighted' ] = False     #Market cap-weighted if True, else equal-weighted
+    params['max_weight'   ] = 50       #Max weight in a portfolio as a multiple of equal-weights
+    params['min_weight'   ] = 0.03     #Min weight 
+    params['do_not_trade' ] = None     #['TSLA'] #Stocks excluded from trading
 
+    # If we want to use historical market caps, load the data    
+    if params['cap_weighted']:
+        params['hist_mcaps'] = pd.read_pickle(HIST_MCAP_FILE)
     return params
 
 #%% Load all stock panel data from pickle files
@@ -62,8 +74,7 @@ def load_monthly_df(field = 'r_ovnt', rebuild=False, save_df=True):
     
     if not rebuild:
         # Load file from pickle
-        with open(pickle_fname, "rb") as f:
-            dfm = pickle.load(f)
+        dfm = pd.read_pickle(pickle_fname)
     else:
         
         # Re-generate monthy on returns form panel data
@@ -132,6 +143,50 @@ def gen_positions(df_sort, sim_params):
     return positions, thresholds
     
 #%% Calculate portfolio returns from positions and stock returns
+# Generate portfoio weights that add up to 1 for a subset of tickers
+def gen_port_weights(date, mask, params):
+    """Calculate portfolio weights that add up to 1 for a subset of stocks given market caps
+    Parameters:
+        date:   datetime type, should be in the rows index
+        mask:   boolean array to indicate stocks which we should include
+        params: dict with parameters
+        
+    Return: 
+        weights: pd series with weights for every stock
+    """
+
+    # If there are stocks that we don't want to trade, exclude them
+    do_not_trade = params['do_not_trade']
+    if do_not_trade is not None:
+        for ticker in do_not_trade:
+            mask[ticker] = False
+
+    if not params['cap_weighted']:    # We want an equal-weighted portfolio
+        weights = mask / np.sum(mask)
+        
+    else:       # We want a market-cap weighted portfolio
+        hist_mcaps = params['hist_mcaps']
+        mcaps_on_date = hist_mcaps.loc[date,:]
+        raw_weights = (mcaps_on_date * mask) / np.sum(mcaps_on_date * mask)
+        
+        # Check that all weights are within allowed range
+        if (params['max_weight'] is None) and (params['min_weight'] is None):
+            weights = raw_weights
+        else:
+            if params['max_weight'] is not None:
+                max_weight = params['max_weight'] / sum(mask)
+                raw_weights[raw_weights > max_weight] = max_weight
+            
+            if params['min_weight'] is not None:
+                min_weight = params['min_weight'] / sum(mask)
+                raw_weights[(raw_weights < min_weight) & (raw_weights > 0)] = min_weight
+            
+            weights = raw_weights / raw_weights.sum()
+        
+    #print(f"Max={weights[mask].max()*100:.2f}, min={weights[mask].min()*100:.2f}, TSLA={weights['TSLA']*100:.4f}")
+    return weights
+
+# Calculate portfolio returns
 def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
     """ Calculate portfolio returns
         Parameters:
@@ -147,11 +202,14 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
 
     # Unpack parameters
     try:
-        window    =  params['window']
+        window     = params['window']
         borrow_fee = params['borrow_fee']
         trx_costs  = params['trx_costs']
+                    
     except KeyError as err:
         print("Missing simulation parameter: ", err)
+    
+    # Get historical market caps <- store it in parameters structure, load at initiation
     
     # Set up a dataframe to hold the results
     port_cols  = ['r_l', 'r_s', 'r_ls', 'r_ix', 'r_ix_f']
@@ -168,50 +226,59 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
             continue
     
         # Extract position and return rows
-        pos_row = pos.iloc[t-1,:]
-        ret_row = ret_s.iloc[t,:]
+        pos_row      = pos.iloc[t-1,:]
+        ret_row      = ret_s.iloc[t,:]
         ret_full_row = ret_full_s.iloc[t,:]
 
         # Identify long and short stocks, and stocks with missing data
         long_mask  = ( pos_row ==  1 )
-        short_mask = ( pos_row == -1 )
+        shrt_mask  = ( pos_row == -1 )
         zero_mask  = ( ret_row ==  0 ) & (ret_full_row == 0)
         
-        # Gross returns - first on each stock, then on long/sort portfolio
-        stock_r = pos_row * ret_row
-        
-        port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()
+        # Generate weights of long, short and index portfolios
+        long_weights =  gen_port_weights(date,  long_mask, params)
+        shrt_weights = -gen_port_weights(date,  shrt_mask, params)
+        indx_weights =  gen_port_weights(date, ~zero_mask, params)
 
+        # =============================================================================
+        # Gross returns on longs, shorts, long/short, index o/n or intra, index buy and hold
+        # =============================================================================
+        stock_r_long      = long_weights * ret_row
+        stock_r_shrt      = shrt_weights * ret_row
+        stock_r_indx      = indx_weights * ret_row
+        stock_r_indx_full = indx_weights * ret_full_row
+        
         if not intra:  #if we hold positions overnight
-            port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()
-            port_r.loc[date,'r_s' ]   = stock_r[short_mask].mean() + riskfree.loc[date,'Rets'] * 2
-            port_r.loc[date,'r_ix']   = ret_row[~zero_mask].mean()
+            port_r.loc[date,'r_l' ]   = stock_r_long.sum()
+            port_r.loc[date,'r_s' ]   = stock_r_shrt.sum() + riskfree.loc[date,'Rets'] * 2
+            port_r.loc[date,'r_ix']   = stock_r_indx.sum()
+            
         else:  #no positions overnight - pay no interest or borrow fees
-            port_r.loc[date,'r_l' ]   = stock_r[long_mask].mean()  + riskfree.loc[date,'Rets']           
-            port_r.loc[date,'r_s' ]   = stock_r[short_mask].mean() + riskfree.loc[date,'Rets'] 
-            port_r.loc[date,'r_ix']   = ret_row[~zero_mask].mean() + riskfree.loc[date,'Rets'] 
+            port_r.loc[date,'r_l' ]   = stock_r_long.sum() + riskfree.loc[date,'Rets']           
+            port_r.loc[date,'r_s' ]   = stock_r_shrt.sum() + riskfree.loc[date,'Rets'] 
+            port_r.loc[date,'r_ix']   = stock_r_indx.sum() + riskfree.loc[date,'Rets'] 
             
         port_r.loc[date,'r_ls']   = port_r.loc[date,'r_l'] + port_r.loc[date,'r_s']
         
-        # Index buy-and-hold return - subtract initial transactions costs, otherwise assume no rebal
+        # Index buy-and-hold return - subtract initial transactions costs, otherwise assume no trading
         # Only consider stocks for which we have returns (i.e. ones that trade)
-        port_r.loc[date,'r_ix_f'] = ret_full_row[~zero_mask].mean()
+        port_r.loc[date,'r_ix_f'] = stock_r_indx_full.sum()
 
-        # Caclulate net returns - assume we trade 2x per day on each position, 21.6 trading days per month
-        # Position changes
-        stock_r_net     = stock_r - trx_costs * 2 * TD_PER_MONTH / 10000
+        # =============================================================================
+        # Net returns - assume we trade 2x per day on each position, TD_PER_MONTH trading days per month x 2 trades
+        # =============================================================================
+        monthly_trx_costs = trx_costs * 2 * TD_PER_MONTH / 10000
 
         if not intra:
-            port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()
-            port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] * 2 \
-                                            - borrow_fee / 12 / 10000
+            port_r_net.loc[date,'r_l' ]  = port_r.loc[date,'r_l'] - monthly_trx_costs
+            port_r_net.loc[date,'r_s' ]  = port_r.loc[date,'r_s'] - monthly_trx_costs - borrow_fee / 12 / 10000
+            port_r_net.loc[date,'r_ix' ] = port_r.loc[date,'r_ix'] - monthly_trx_costs
 
         else: #no positions overnight - pay no interest or borrow fees
-            port_r_net.loc[date,'r_l' ] = stock_r_net[long_mask].mean()  + riskfree.loc[date,'Rets'] 
-            port_r_net.loc[date,'r_s' ] = stock_r_net[short_mask].mean() + riskfree.loc[date,'Rets'] 
+            port_r_net.loc[date,'r_l' ]  = port_r.loc[date,'r_l']  - monthly_trx_costs 
+            port_r_net.loc[date,'r_s' ]  = port_r.loc[date,'r_s']  - monthly_trx_costs 
+            port_r_net.loc[date,'r_ix' ] = port_r.loc[date,'r_ix'] - monthly_trx_costs 
                                         
-
-        port_r_net.loc[date,'r_ix'] = port_r.loc[date,'r_ix'] - trx_costs * 2 * TD_PER_MONTH / 10000
         port_r_net.loc[date,'r_ls'] = port_r_net.loc[date,'r_l'] + port_r_net.loc[date,'r_s']
     
         # Index buy-and-hold return
@@ -327,6 +394,68 @@ def plot_for_paper(ret, use_log=True, start=None, end=None, title_codes=None):
     
     # Return cumulative log returns
     return rln_cum
+
+#%% Generate a simple plot for paper - only L/S but nicely labelled
+def plot_simple_LS(port_grs, port_net, start = None, end=None):
+    """ Plot a simplified graph, only LS gross and net"""
+    
+    ret_grs = port_grs['r_ls'].dropna()
+    ret_net = port_net['r_ls'].dropna()
+    
+    df = pd.DataFrame({'r_grs':ret_grs, 'r_net':ret_net})
+    
+    df['cum_grs'] = (1+df['r_grs']).cumprod()
+    df['cum_net'] = (1+df['r_net']).cumprod()
+    df['5y_avg_grs'] = df['r_grs'].rolling(60).mean() * 12
+    df['5y_avg_net'] = df['r_net'].rolling(60).mean() * 12
+    
+    # Build up the graph of cumulative returns
+    title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
+                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+    linestyles  = [':','-']
+    ax = df[['cum_grs','cum_net']].plot(logy=True,  style=linestyles, fontsize='small',grid=True)
+    ax.set_title(title_string,fontsize=10)
+    
+    legend_list = ["Gross (Final=${:.0f})".format(df['cum_grs'].iloc[-1]), 
+                   "Net   (Final=${:.0f})".format(df['cum_net'].iloc[-1])]
+    
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Capital $", fontsize='small')
+    ax.set_xlabel(None)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('$%.1f'))
+
+    box_text = ("Net Return: 30.8%\n"
+                "Standard Deviation: 9.5%\n"
+                "Sharpe Ratio Net: 2.65\n"
+                "Largest Drawdown: 5.3%\n"
+                "t-Stat: 13.9")
+    ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
+            bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
+    
+    plt.show()
+    
+    # Graph of rolling returns
+    years = (df.index[-1] - df.index[0]) / timedelta(days=365.25)
+    grs_avg_ret = df['cum_grs'][-1] ** (1/years) - 1
+    net_avg_ret = df['cum_net'][-1] ** (1/years) - 1
+    
+    title_string = ("Rolling 5y Annual Returns - 1995-2022- Holding Overnight"
+                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+    linestyles  = [':','-']
+    ax = (df[['5y_avg_grs','5y_avg_net']]*100).plot(style=linestyles, fontsize='small',grid=True)
+    ax.set_title(title_string,fontsize=10)
+    
+    legend_list = ["Gross (Avg={:.1f}%)".format(grs_avg_ret*100), 
+                   "Net   (Avg={:.1f}%)".format(net_avg_ret*100)]
+    
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Rolling 5y Annual return %", fontsize='small')
+    ax.set_xlabel(None)
+    ax = ax.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=1))
+
+    plt.show()
+    
+    return df
 
 #%% Generate time series statistics
 def get_time_series_stats(rets, riskfree, annualize = True):
@@ -495,7 +624,80 @@ def gen_table_for_paper():
     print(df_stats)
         
     return df_stats             
+
+#%% Generate a simple table for the paper
+def gen_simple_table(port_grs, port_net):
+    """ Generate a simlpe table for the paper with gross/net returns and related stats"""
     
+    #Column title for the table
+    col_names = {'r_ls': 'Long vs. Short', 
+                  'r_l' : 'Long Side', 
+                  'r_s' : 'Short Side'}
+
+    row_titles = ["Value of $1 Invested Before Trx Costs",
+                  "Value of $1 Invested After Trx Costs",
+                  "Net Return pa",
+                  "Standard Deviation pa",
+                  "Sharpe Ratio Net",
+                  "Largest Drawdown",
+                  "t-Stat"]
+
+    dfs = pd.DataFrame(columns = col_names.values(), index=row_titles)
+    
+    # =============================================================================
+    #  Define a calculation for each column
+    # =============================================================================
+    def gen_one_col_simple_table(s_label):
+        """ Generate one column of the simple table"""
+    
+        col = pd.Series(0.0, index=row_titles)
+        
+        # Get gross and net series and calculate cumulative
+        ret_grs = port_grs[s_label]
+        ret_net = port_net[s_label]
+
+    
+        df = pd.DataFrame({'r_grs':ret_grs, 'r_net':ret_net}).dropna()
+        
+        df['cum_grs']  = (1+df['r_grs']).cumprod()
+        df['cum_net']  = (1+df['r_net']).cumprod()
+
+        # Populate the columns
+        # Mean return
+        col["Value of $1 Invested Before Trx Costs"] = df['cum_grs'].iloc[-1]
+        col["Value of $1 Invested After Trx Costs"] = df['cum_net'].iloc[-1]
+        
+        # Annual return
+        years = (df.index[-1] - df.index[0]) / timedelta(days=365.25)
+        col["Net Return pa"] = df['cum_net'][-1] ** (1/years) - 1
+        
+        # Std Dev
+        col["Standard Deviation pa"] = np.log(1+df['r_net']).std() * np.sqrt(12)
+                 
+        # Sharpe Ratio
+        df1 = df.merge(riskfree, how='left', left_index=True, right_index=True)
+        df1['xr_net'] = df1['r_net'] - df1['Rets'] #second term is risk-free rate
+        
+        col["Sharpe Ratio Net"] = df1['xr_net'].mean() *12 / col["Standard Deviation pa"]
+        
+        # Largest drawdown
+        df1['drawdown'] = 1 - df['cum_net'] / df['cum_net'].cummax()
+        col["Largest Drawdown"] = df1['drawdown'].max()
+                           
+        # T-stat
+        col['t-Stat'] = col["Sharpe Ratio Net"] * np.sqrt(years)      
+        
+        return col
+        
+    # =============================================================================
+    #  Loop over time series and generate a column for each
+    # =============================================================================
+    for s, col in col_names.items():
+        dfs[col] = gen_one_col_simple_table(s)
+        
+    return dfs
+        
+
 #%% Start of the main program
 if __name__ == "__main__":
     
@@ -549,19 +751,24 @@ if __name__ == "__main__":
 
 
     #%% Analyze the cumulative return time series     
-    
     if report_for_paper:
         df_stats = gen_table_for_paper()
         fname = "df_stats_paper.p"
     else:
         df_stats = gen_summary_report()
         fname = "df_paper.p"
+
+    #%% Produce a simple LS chart
+    _ = plot_simple_LS(port_o, port_o_net)
     
+    #%% Generate a simple table for the paper
+    df_simple = gen_simple_table(port_o, port_o_net)
+    print(df_simple)
     #%% Save structures to pickle files
-    pickle_dir = '../data'
+    # pickle_dir = '../data'
     
-    df_stats.to_pickle(os.path.join(pickle_dir,fname))   
-    df_stats.to_clipboard()
+    # df_stats.to_pickle(os.path.join(pickle_dir,fname))   
+    # df_stats.to_clipboard()
    
     
     print("Done")

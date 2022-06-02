@@ -1,0 +1,9 @@
+*.p
+*.csv
+*.pyc
+*.xlsx
+*.xls
+*.pptx
+*.pdf
+*cache.sqlite
+Archive
