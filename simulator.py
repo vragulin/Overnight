@@ -18,7 +18,7 @@ import matplotlib.ticker as mtick
 import load_FF_rates as ff
 from datetime import timedelta
 import datetime as dt
-import os
+#import os
 
 #%% Global variables - file locations
 TICKER_FILE         = "../data/sp500tickers.pickle"
@@ -413,7 +413,8 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
                     "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
     linestyles  = [':','-']
-    ax = df[['cum_grs','cum_net']].plot(logy=True,  style=linestyles, fontsize='small',grid=True)
+        
+    ax = df[['cum_grs', 'cum_net']].plot(logy=True,  style=linestyles, fontsize='small',grid=True)
     ax.set_title(title_string,fontsize=10)
     
     legend_list = ["Gross (Final=${:.0f})".format(df['cum_grs'].iloc[-1]), 
@@ -456,7 +457,65 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     plt.show()
     
     return df
+#%% Generate a simple gross only plot for paper - only L/S but nicely labelled
+def plot_simple_LS_gross(port_grs, start = None, end=None):
+    """ Plot a simplified graph, only LS gross only"""
+    
+    ret_grs = port_grs['r_ls'].dropna()
+    
+    df = pd.DataFrame({'r_grs':ret_grs})
+    
+    df['cum_grs'] = (1+df['r_grs']).cumprod()
+    df['5y_avg_grs'] = df['r_grs'].rolling(60).mean() * 12
+    
+    # Build up the graph of cumulative returns
+    title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
+                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+    linestyles  = [':','-']
+        
+    ax = df['cum_grs'].plot(logy=True,  style=linestyles, fontsize='small',grid=True)
+    ax.set_title(title_string,fontsize=10)
+    
+    legend_list = ["Gross (Final=${:.0f})".format(df['cum_grs'].iloc[-1]), 
+                   "Net   (Final=${:.0f})".format(df['cum_net'].iloc[-1])]
+    
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Capital $", fontsize='small')
+    ax.set_xlabel(None)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('$%.1f'))
 
+    box_text = ("Net Return: 30.8%\n"
+                "Standard Deviation: 9.5%\n"
+                "Sharpe Ratio Net: 2.65\n"
+                "Largest Drawdown: 5.3%\n"
+                "t-Stat: 13.9")
+    ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
+            bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
+    
+    plt.show()
+    
+    # Graph of rolling returns
+    years = (df.index[-1] - df.index[0]) / timedelta(days=365.25)
+    grs_avg_ret = df['cum_grs'][-1] ** (1/years) - 1
+    net_avg_ret = df['cum_net'][-1] ** (1/years) - 1
+    
+    title_string = ("Rolling 5y Annual Returns - 1995-2022- Holding Overnight"
+                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+    linestyles  = [':','-']
+    ax = (df[['5y_avg_grs','5y_avg_net']]*100).plot(style=linestyles, fontsize='small',grid=True)
+    ax.set_title(title_string,fontsize=10)
+    
+    legend_list = ["Gross (Avg={:.1f}%)".format(grs_avg_ret*100), 
+                   "Net   (Avg={:.1f}%)".format(net_avg_ret*100)]
+    
+    ax.legend(legend_list, fontsize='small')
+    ax.set_ylabel("Rolling 5y Annual return %", fontsize='small')
+    ax.set_xlabel(None)
+    ax = ax.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=1))
+
+    plt.show()
+    
+    return df
 #%% Generate time series statistics
 def get_time_series_stats(rets, riskfree, annualize = True):
     """ Generate descriptive statistics for a time series

@@ -10,18 +10,27 @@ import datetime as dt
 import os, sys
 import pandas as pd
 import pandas_datareader.data as web
+import datetime
+import requests_cache
 import yfinance as yf
 import pickle
 import requests
 import numpy as np
 from calc_adj_close import calc_adj_closes
 import config
-from alpha_vantage.timeseries import TimeSeries
+
+#from alpha_vantage.timeseries import TimeSeries
+import eod_historical_data as eod
+from eod_historical_data._utils import RemoteDataError
+
+
 
 # Global variables - file locations
 TICKER_FILE    = "../data/sp500tickers.pickle"
+BBG_TKR_FILE   = "../data/bbg_tickers.pickle"
 ALL_STOCKS_DFS = "../data/all_stocks_px_ret.pickle"
 STOCK_DFS_DIR  = "../stock_dfs"
+DATA_DIR       = "../data"
 
 #%% Load S&P Tickers
 def save_sp500_tickers():
@@ -36,6 +45,34 @@ def save_sp500_tickers():
         pickle.dump(tickers, f)
     return tickers
 
+#%% Load Tickers from Elm's Bloomberg list
+def load_BBG_tickers(reload=True):
+    
+    if reload:
+        """ load Bbg tickers from an excel file """
+        src_fbase = "US Ticker List.xlsx"
+        src_fpath = os.path.join(DATA_DIR, src_fbase)
+        
+        # Read Excel file
+        df = pd.read_excel(src_fpath)
+        
+        # Extract just the symbol from the BBG ticker
+        df['sym'] = df['Ticker'].apply(lambda x: x.split()[0])
+        #print(df.head())
+        
+        # Save tickers into a pickle file
+        tickers = df['sym'].values
+        with open(BBG_TKR_FILE, "wb") as f:
+            pickle.dump(tickers, f)
+            
+    else:
+        # If reload is False, just load tickers from pickle file
+        with open(BBG_TKR_FILE, "rb") as f:
+            tickers = pickle.load(f)
+            
+    return tickers
+    
+    
 
 #%% Load historical prices into CSV files
 def get_data_from_yahoo(reload_sp500=False, source='web_yahoo'):
@@ -80,7 +117,48 @@ def get_data_from_yahoo(reload_sp500=False, source='web_yahoo'):
         else:
             print('Already have {}'.format(ticker))
 
+#%% Load historical prices into CSV files from EOD Historical data
+def get_data_from_eodhist(reload_tkr=False):
+    """ Load stock history from eodhist API for a list of tickers """
+    if reload_tkr:
+        tickers = load_BBG_tickers()
+    else:
+        with open(BBG_TKR_FILE, "rb") as f:
+            tickers = pickle.load(f)
+    if not os.path.exists(STOCK_DFS_DIR):
+        os.makedirs(STOCK_DFS_DIR)
 
+    start = dt.datetime(1993, 1, 1)
+    end = dt.datetime.now()
+    
+    # Cache session (to avoid too much data consumption)
+    expire_after = datetime.timedelta(days=3)
+    session = requests_cache.CachedSession(cache_name='cache', backend='sqlite',
+                                           expire_after=expire_after)
+    exchange= "US"
+    
+    for i, ticker in enumerate(tickers):
+        print(f"{i}: {ticker}")
+        # just in case your connection breaks, we'd like to save our progress!
+        if not os.path.exists('{}/{}.csv'.format(STOCK_DFS_DIR, ticker)):
+            try:
+                df = eod.get_eod_data(ticker, exchange, start=start, end=end, session=session)
+            except RemoteDataError as e:
+                print(f"Load failed for {ticker}. ", e)
+                continue
+            
+            # Rename columns to make consistent with yahoo
+            df.index.name = "Date"
+            df.rename(columns={'Adjusted_close':'Adj Close'}, inplace = True)
+            
+            # Format and save data in the right way
+            df.reset_index(inplace=True)
+            df.set_index("Date", inplace=True)
+            #df = df.drop("Symbol", axis=1)
+            df.to_csv('{}/{}.csv'.format(STOCK_DFS_DIR, ticker))
+        else:
+            print('Already have {}'.format(ticker))
+    
 
 #%% Collect data into a single dataframe
 def test_my_adj_close(df):
@@ -154,12 +232,22 @@ def compile_data(use_own_adj = False, source='web_yahoo', drop_splits=False):
     print(f"Finished. Aggregate df has {len(main_df)} rows.")
     with open(ALL_STOCKS_DFS, "wb") as f:
         pickle.dump(main_df, f)
-    
+#%% Main program 
 def main():
+
+    reload_tickers = False
     
-    #save_sp500_tickers()
-    #get_data_from_yahoo(reload_sp500=True, source='yfinance')
-    compile_data(use_own_adj=False, drop_splits=True)
+    ticker_source = "BBG_file" # or S&P
+    if ticker_source == "S&P":
+        #save_sp500_tickers()
+        #get_data_from_yahoo(reload_sp500=True, source='yfinance')
+        compile_data(use_own_adj=False, drop_splits=True)
+    elif ticker_source == "BBG_file":
+        tickers = load_BBG_tickers(reload=reload_tickers)
+        print(tickers[:5], "\n...\n", tickers[-5:])
+        get_data_from_eodhist()
+    else:
+        print(f"Error: Invalid ticker source: {ticker_source}")
 
 
 if __name__ == "__main__":

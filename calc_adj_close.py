@@ -10,7 +10,30 @@ import os
 #import yfinance as yf
 
 #%% Calculate my own adjusted close for a stock
-def calc_adj_closes(closes, dividends=None, splits=None):
+def parse_eod_hd_splits(splits):
+    """ 
+    Parse a dataframe with splits data in eod_hd format to default format 
+    EOD Hist Data gives splits as a string ['7.00 / 1.00'], default format 
+    is just a multiplier.
+    
+    Parameters:
+    -----------
+    splits: pandas series with index date and column of slpits as 'xx/yy' strings.
+    
+    Returns
+    -------
+    df: dataframe with dates and float multipliers """
+        
+    # Separate the split string into a numerator and a denominator
+    df = splits.str.split("/", n=1, expand=True)
+    df.rename(columns={0:"Numerator", 1:"Denominator"}, inplace=True)
+    df["Split String"] = splits
+    df["Split Factor"] = df["Numerator"].astype(float) / df["Denominator"].astype(float)
+    
+    return df
+
+def calc_adj_closes(closes, dividends=None, splits=None, source='default',
+                    adj_div_for_splits = False):
     """
     Parameters
     ----------
@@ -18,29 +41,57 @@ def calc_adj_closes(closes, dividends=None, splits=None):
     dividents : panda series with dividend amounts and dates, can be either dense (for all dates)
                 or sparse (without zeros), if None - don't adjust
     splits : pandas series with splits dates and rates, dense or sparse, if None - don't adjust
+    source : name of vendor, which determines the format of the "spit" dataframe.  In practice,
+             only 2 values have been implemented: 
+                 * 'default' - where values are floats (e.g. 7.0 for a 7-to-1 splits)
+                 * 'eod_hd' - from (eod hist data) where splits are given as strings ['7.00/1.00']
+    
+    adj_div_for_splits : if dividends are not already adjusted for splits (i.e. are based off Close not Adj Close),
+                         then perform this adjustment.  It's not necessary for Yahoo or EODHD, since divs there 
+                         are already split-adjusted.
     
     Returns
     -------
     df: dataframe with adjusted closes prices for same dates as closes, splits factors and div factors
     """
 
+    
+    # Extract start and end data of the stock series
+    start = min(closes.index)
+    end   = max(closes.index)
+
     # Create a copy of dividends
-    adj_dividends = dividends.copy()
-    adj_dividends.name = "Dividends"
+    if dividends is not None:
+        
+        adj_dividends = dividends.copy()
+        adj_dividends.name = "Dividends"
+        # Only consider dividends within the relevant date range
+        adj_dividends = adj_dividends[(adj_dividends.index >= start) & (adj_dividends.index <= end)]
     
     # Adjust for splits
     df = pd.DataFrame(closes).rename(columns={closes.name: "Close"})
     
     
     if splits is not None:
-        df = df.join(splits[splits>0], how='outer').sort_index(ascending=False)\
-                    .rename(columns={splits.name: "Splits"})
+        if source == "eod_hd":
+            splits1 = parse_eod_hd_splits(splits)['Split Factor']
+        else:
+            splits1 = splits.copy()
+            
+        # Only consider splits within the relevant date range
+        splits1 = splits1[ (splits1.index >= start) & (splits1.index<=end) ]
+        
+        df = df.join(splits1[splits1>0], how='outer').sort_index(ascending=False)\
+                    .rename(columns={splits1.name: "Splits"})
         split_coef = df['Splits'].shift(1).fillna(1).cumprod()
         df['Close'] = df['Close'] / split_coef
         
         if dividends is not None:
-             adj_dividends = adj_dividends / split_coef
-             adj_dividends.name = "Dividends"         
+            if adj_div_for_splits:
+                # If dividends are not already split-adjusted (in Yahoo and EOD HD they are, so this is not needed)
+                adj_dividends = adj_dividends / split_coef
+                
+            adj_dividends.name = "Dividends"         
 
         df['Split_Factors'] = split_coef                
         

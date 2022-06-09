@@ -16,7 +16,6 @@ from eod_historical_data._utils import (_init_session, _format_date,
 import datetime
 import requests
 import requests_cache
-import pandas as pd
 from io import StringIO
 
 # My config file with API Keys
@@ -45,7 +44,7 @@ def get_splits(symbol, exchange, start=None, end=None,
     r = session.get(url, params=params)
     if r.status_code == requests.codes.ok:
         df = pd.read_csv(StringIO(r.text), skipfooter=1,
-                         parse_dates=[0], index_col=0)
+                         parse_dates=[0], index_col=0, engine='python')
         assert len(df.columns) == 1
         ts = df["Stock Splits"]
         return ts
@@ -61,7 +60,7 @@ if __name__ == "__main__":
     session = requests_cache.CachedSession(cache_name='cache', backend='sqlite',
                                            expire_after=expire_after)
     
-    sym = "HAR"
+    sym = "AAPL"
     exchange = "US"
     start = "1993-01-01"
     end = "2022-06-01"
