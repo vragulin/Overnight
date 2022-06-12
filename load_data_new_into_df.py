@@ -75,9 +75,9 @@ def compile_data():
         df = df.drop(columns = ['Volume','$Vol', 'Factor'])
                     
         # # Calculate log returns - don't need them yet
-        # df['r_full'] = np.log(df['Adj Close']).diff()
-        # df['r_intr'] = np.log(df['Adj Close']) - np.log(df['Adj Open'])
-        # df['r_ovnt'] = df['r_full'] - df['r_intr']
+        df['r_full'] = np.log(df['Adj Close']).diff()
+        df['r_intr'] = np.log(df['Adj Close']) - np.log(df['Adj Open'])
+        df['r_ovnt'] = df['r_full'] - df['r_intr']
 
         # Convert into long format table so it's easier to aggregate across stocks
         df1 = df.unstack().reset_index()
@@ -106,6 +106,8 @@ def main():
     
     df = compile_data()
     print("Done")
+    
+    return df
 
 if __name__ == "__main__":
     main()

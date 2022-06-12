@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 
 from build_index_sim_stocks import calc_index_returns
+from build_index_sim_stocks import calc_mcap_weights
+
 
 #%% Entry point
 if __name__ == "__main__":
@@ -40,9 +42,37 @@ if __name__ == "__main__":
    # Another test with manually-defined weights
     weights3 = [ [0.5,      0.5    ],
                  [1,        np.nan ],
-                 [0,        1      ],
+                 [0.5,      0.5   ],
                  [np.nan,   1      ] ] 
 
     df_weights = pd.DataFrame(weights3, columns = df_close.columns)    
     df = calc_index_returns(df_close, df_weights)
     print(df)
+    
+    # Test with index
+    idx_members = [ [ True, True ],
+                    [ True, True ],
+                    [ True, True ],
+                    [ True, True ] ]
+
+    mcaps    = weights3
+
+    df_idx_memb = pd.DataFrame(idx_members, columns = df_close.columns)   
+    df_mcaps    = pd.DataFrame(mcaps, columns = df_close.columns)   
+    
+    df_weights = calc_mcap_weights(df_mcaps, idx_members = df_idx_memb)
+    df = calc_index_returns(df_close, df_weights)
+    print(df)
+    
+    # Another test
+    idx_members = [ [ True, False ],
+                    [ True, False ],
+                    [ True, False ],
+                    [ True, True  ] ]
+
+    df_idx_memb = pd.DataFrame(idx_members, columns = df_close.columns)   
+    df_weights = calc_mcap_weights(df_mcaps, idx_members = df_idx_memb)
+    df = calc_index_returns(df_close, df_weights)
+    print(df)
+    
+    

@@ -102,9 +102,9 @@ def load_mcap_multhread(tickers=None, fpath=None, reload=True, save=True):
 # =============================================================================
 if __name__ == "__main__":
     
-    tickers = pd.read_pickle(os.path.join(DATA_DIR,"sp500tickers.pickle"))
+    tickers = pd.read_pickle(os.path.join(DATA_DIR,"elm_good_tkrs.pickle"))
     
-    fpath = os.path.join(DATA_DIR, "mkt_cap.p")
+    fpath = os.path.join(DATA_DIR, "mkt_cap2.pickle")
     mcap = load_mcap_multhread(tickers = tickers, fpath=fpath)
     
     print(mcap)

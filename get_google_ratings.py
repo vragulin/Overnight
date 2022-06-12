@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import os
 import yfinance as yf
+import time
 #import pickle
 
 DATA_DIR = "../data"
@@ -53,7 +54,7 @@ def get_goog_ticker(ticker):
     tkObj = yf.Ticker(ticker)
     #name=tkObj.info['shortName']
     name = ticker
-    print(f"{ticker}: {name}")
+    #print(f"{ticker}: {name}")
     #keywords = [ " ".join([name[:12],"shares"])]
     # if name in ["Amazon.com", "Netflix, Inc."]:
     #     keywords = [ "Amazon.com", "Netflix, Inc." ]
@@ -92,15 +93,17 @@ def get_goog_ticker(ticker):
 # =============================================================================
 if __name__ == "__main__":
 
-    tickers = pd.read_pickle(os.path.join(DATA_DIR,"sp500tickers.pickle"))
+    ticker_file=  'elm_good_tkrs.pickle' #"sp500tickers.pickle"
+    tickers = pd.read_pickle(os.path.join(DATA_DIR, ticker_file))
     
     goog = pd.DataFrame(np.nan, index=tickers, columns=["avg_interest"])
     
-    for ticker in tickers: #['AMZN', 'NFLX', 'TECH', 'SO', 'MMM']:
+    for ticker in tickers[799:]: #['AMZN', 'NFLX', 'TECH', 'SO', 'MMM']:
         interest = get_goog_ticker(ticker)
         print(f"{ticker}: {interest}")
         goog.loc[ticker,"avg_interest"] = interest
-    
+        time.sleep(2)
+        
     goog.to_clipboard()
     print("Done")
     
