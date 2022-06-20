@@ -35,7 +35,7 @@ def init_sim_params():
     """ Initialize Sim Params, return dictionary"""
     params = {}
     params['rebuild'      ] = False    #Regenerate stock return files
-    params['window'       ] = 24      #window in months for the return calculation
+    params['window'       ] = 36        #window in months for the return calculation
     params['trx_costs'    ] = 0.5     #one-way trading costs in bp
     params['borrow_fee'   ] = 25      #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1       #initial capital
@@ -378,9 +378,9 @@ def plot_for_paper(ret, use_log=True, start=None, end=None, title_codes=None):
     else:
         pctile_str = "{}/{} Quantiles".format(*sim['trade_pctiles'])
         
-    title_string = "Value of $1 Invested {} - {} - {}\n{} on Trailing 2y [O/N-Intraday], {}"\
+    title_string = "Value of $1 Invested {} - {} - {}\n{} on Trailing {}y [O/N-Intraday], {}"\
                     .format(title_log_str, title_codes[2], title_codes[0], \
-                            pctile_str, title_codes[1])
+                            pctile_str, sim['window']/12, title_codes[1])
     
     if use_log:
         ax = rln_cum.plot(title = title_string, style=linestyles, fontsize='small')
@@ -422,7 +422,7 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     
     # Build up the graph of cumulative returns
     title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
-                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+                    f"\nLong/Short Portfolios based on Trailing {sim['window']}y [O/N-Intraday] Quintiles")
     linestyles  = [':','-']
         
     ax = df[['cum_grs', 'cum_net']].plot(logy=True,  style=linestyles, fontsize='small',grid=True)
@@ -452,7 +452,7 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     net_avg_ret = df['cum_net'][-1] ** (1/years) - 1
     
     title_string = ("Rolling 5y Annual Returns - 1995-2022- Holding Overnight"
-                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+                    f"\nLong/Short Portfolios based on Trailing {sim['window']}y [O/N-Intraday] Quintiles")
     linestyles  = [':','-']
     ax = (df[['5y_avg_grs','5y_avg_net']]*100).plot(style=linestyles, fontsize='small',grid=True)
     ax.set_title(title_string,fontsize=10)
@@ -506,7 +506,7 @@ def plot_simple_LS_gross(port_grs, start = None, end=None, full_day=False):
     ax = df['cum_grs'].plot(logy=logy, fontsize='small',grid=True)
 
     title_string = (f"Value of $1 Invested - 1995-2022- Holding {holding_code}"
-                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+                    f"\nLong/Short Portfolios based on Trailing {sim['window']}m [O/N-Intraday] Quintiles")
     
     ax.set_title(title_string,fontsize=10)
     
@@ -516,10 +516,12 @@ def plot_simple_LS_gross(port_grs, start = None, end=None, full_day=False):
     ax.set_ylabel("Capital $", fontsize='small')
     ax.set_xlabel(None)
     ax.yaxis.set_major_formatter(FormatStrFormatter('$%.1f'))
+       
+    add_text = False
+    if add_text:
+        ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
+                bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
         
-    ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
-            bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
-    
     plt.show()
     
     # Graph of rolling returns
@@ -527,7 +529,7 @@ def plot_simple_LS_gross(port_grs, start = None, end=None, full_day=False):
     grs_avg_ret = df['cum_grs'][-1] ** (1/years) - 1
     
     title_string = (f"Rolling 5y Annual Returns - 1995-2022- Holding {holding_code}"
-                    "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
+                    f"\nLong/Short Portfolios based on Trailing {sim['window']}m [O/N-Intraday] Quintiles")
         
     #linestyles  = [':','-']
     ax = (df['5y_avg_grs']*100).plot(fontsize='small',grid=True)

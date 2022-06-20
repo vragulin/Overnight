@@ -34,7 +34,7 @@ def init_sim_params():
     params = {}
     params['rebuild'      ] = True    #Regenerate stock return files
     params['window'       ] = 24       #window in months for the return calculation
-    params['trx_costs'    ] = 0.5      #one-way trading costs in bp
+    params['trx_costs'    ] = 1        #one-way trading costs in bp
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1        #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
@@ -421,8 +421,8 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     
     df['cum_grs'] = (1+df['r_grs']).cumprod()
     df['cum_net'] = (1+df['r_net']).cumprod()
-    df['5y_avg_grs'] = df['r_grs'].rolling(60).mean() * 12
-    df['5y_avg_net'] = df['r_net'].rolling(60).mean() * 12
+    df['5y_avg_grs'] = df['r_grs'].rolling(12).mean() * 12
+    df['5y_avg_net'] = df['r_net'].rolling(12).mean() * 12
     
     # Build up the graph of cumulative returns
     title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
@@ -455,7 +455,7 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
     grs_avg_ret = df['cum_grs'][-1] ** (1/years) - 1
     net_avg_ret = df['cum_net'][-1] ** (1/years) - 1
     
-    title_string = ("Rolling 5y Annual Returns - 1995-2022- Holding Overnight"
+    title_string = ("Rolling 1y Annual Returns - 1995-2022- Holding Overnight"
                     "\nLong/Short Portfolios based on Trailing 2y [O/N-Intraday] Quintiles")
     linestyles  = [':','-']
     ax = (df[['5y_avg_grs','5y_avg_net']]*100).plot(style=linestyles, fontsize='small',grid=True)
@@ -835,7 +835,7 @@ if __name__ == "__main__":
 
     
     #%% Generate a simple table for the paper
-    use_net = False
+    use_net = True
     if use_net:
         df_simple_plot = plot_simple_LS(port_o, port_o_net)
         df_simple = gen_simple_table(port_o, port_o_net)
