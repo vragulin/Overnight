@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Created on Wed May 19 11:03:16 2021
@@ -30,7 +31,6 @@ TICKER_FILE    = "../data/sp500tickers.pickle"
 BBG_TKR_FILE   = "../data/bbg_tickers.pickle"
 ALL_STOCKS_DFS = "../data/all_stocks_px_ret.pickle"
 STOCK_DFS_DIR  = "../stock_dfs"
-DATA_DIR       = "../data"
 
 #%% Load S&P Tickers
 def save_sp500_tickers():
@@ -137,7 +137,7 @@ def get_data_from_eodhist(reload_tkr=False):
                                            expire_after=expire_after)
     exchange= "US"
     
-    for i, ticker in enumerate(tickers):
+    for i, ticker in enumerate(tickers): #enumerate(['AAPL']):
         print(f"{i}: {ticker}")
         # just in case your connection breaks, we'd like to save our progress!
         if not os.path.exists('{}/{}.csv'.format(STOCK_DFS_DIR, ticker)):

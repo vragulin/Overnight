@@ -119,7 +119,7 @@ def load_FF_period_rets(reload=True, save=True, period='M', start=None, end=None
 if __name__ == "__main__":
     
     # Load FF
-    reload = False
+    reload = True
     ff_series = load_ff_from_FRED(reload=reload)
     
     print(ff_series.head())

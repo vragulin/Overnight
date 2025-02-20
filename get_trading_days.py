@@ -18,7 +18,7 @@ def gen_trading_dates(ref_stocks, start=None, end=None, verbose=False):
     """ Generate a list of valid trading dates by taking the union of trade dates
         for a list of reference 'large and liquid' stocks. """
         
-    " Initialize a dataframe what will all all data"
+    " Initialize a dataframe what will hold all data"
     df = None
     
     for stk in ref_stocks:
@@ -52,10 +52,10 @@ def gen_trading_dates(ref_stocks, start=None, end=None, verbose=False):
 if __name__ == "__main__":
 
     ref_stocks = ["MSFT", "IBM", "JPM", "C", "AAPL", "DUK"]    
-    start = '1993-01-01'
-    end   = '2022-06-01'
+    # start = '1993-01-01'
+    # end   = '2022-06-01'
     
-    df = gen_trading_dates(ref_stocks, verbose = True)
+    df = gen_trading_dates(ref_stocks, verbose=True)
     
     # Save to data directory
     df.to_pickle(os.path.join(DATA_DIR, "trading_days.pickle"))

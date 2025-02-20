@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun May 15 20:50:29 2022
+Created on Sun May 15 20:50:29 2024
 
 Simulate a strategy of going long/short portfolio of top/bottom deciles based on OBP
 Unlike the first simulator, which uses market caps and calculates its own weights, 
@@ -45,7 +45,8 @@ def init_sim_params():
 	params['gross'] = True  # Whether to produce graphs and reports for gross or net returns
 	params['max_weight'] = None  # Max weight in a portfolio as a multiple of equal-weights
 	params['min_weight'] = None  # Min weight
-	params['short_gap'] = None  # If we exclude days with a long gap: True - Exclude, False - Only long gaps, None-ignore
+	params[
+		'short_gap'] = None  # If we exclude days with a long gap: True - Exclude, False - Only long gaps, None-ignore
 
 	# Load index weights for the stock universe (we assume that our positions are proportional to these weights)
 	# These can be thought of as market caps (which are re-scaled that total weight for both long and short portfoio
@@ -307,7 +308,7 @@ def calc_portfolio_returns(pos, ret, ret_full, riskfree, params, intra=False):
 
 
 # %% Generate cumulative return plots
-def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
+def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None, logy=True):
 	# Extract returns over the focus period
 	ret1 = ret[start:end].dropna()
 
@@ -339,12 +340,14 @@ def plot_sim_returns(ret, use_log=True, start=None, end=None, title_codes=None):
 		ax = rln_cum.plot(title=title_string, style=linestyles, fontsize='small')
 	else:
 		capital = sim['capital']
-		ax = (ret_cum * capital).plot(title=title_string, style=linestyles, fontsize='small', logy=True)
+		ax = (ret_cum * capital).plot(title=title_string, style=linestyles, fontsize='small', logy=logy)
 
 	if title_codes[0] == 'Overnight':
 		period_label = 'O/N'
-	else:
+	elif title_codes[0] == 'Intraday':
 		period_label = 'Intra'
+	else:
+		period_label = 'Full'
 
 	legend_list = [x.format(period_label) for x in legend_template]
 	ax.legend(legend_list, fontsize='small')
@@ -411,8 +414,10 @@ def plot_for_paper(ret, use_log=True, start=None, end=None, title_codes=None):
 
 
 # %% Generate a simple plot for paper - only L/S but nicely labelled
-def plot_simple_LS(port_grs, port_net, start=None, end=None):
+def plot_simple_LS(port_grs, port_net, start=None, end=None, code='on'):
 	""" Plot a simplified graph, only LS gross and net"""
+
+	assert code == 'on', 'Not implemented for other holding periods'
 
 	ret_grs = port_grs['r_ls'].dropna()
 	ret_net = port_net['r_ls'].dropna()
@@ -425,7 +430,7 @@ def plot_simple_LS(port_grs, port_net, start=None, end=None):
 	df['5y_avg_net'] = df['r_net'].rolling(60).mean() * 12
 
 	# Build up the graph of cumulative returns
-	title_string = ("Value of $1 Invested - 1995-2022- Holding Overnight"
+	title_string = ("Value of $1 Invested - 1995-2024- Holding Overnight"
 	                f"\nLong/Short Portfolios based on Trailing {sim['window']}y [O/N-Intraday] Quintiles")
 	linestyles = [':', '-']
 
@@ -455,7 +460,7 @@ def plot_simple_LS(port_grs, port_net, start=None, end=None):
 	grs_avg_ret = df['cum_grs'][-1] ** (1 / years) - 1
 	net_avg_ret = df['cum_net'][-1] ** (1 / years) - 1
 
-	title_string = ("Rolling 5y Annual Returns - 1995-2022- Holding Overnight"
+	title_string = ("Rolling 5y Annual Returns - 1995-2024- Holding Overnight"
 	                f"\nLong/Short Portfolios based on Trailing {sim['window']}y [O/N-Intraday] Quintiles")
 	linestyles = [':', '-']
 	ax = (df[['5y_avg_grs', '5y_avg_net']] * 100).plot(style=linestyles, fontsize='small', grid=True)
@@ -475,7 +480,7 @@ def plot_simple_LS(port_grs, port_net, start=None, end=None):
 
 
 # %% Generate a simple gross only plot for paper - only L/S but nicely labelled
-def plot_simple_LS_gross(port_grs, start=None, end=None, full_day=False):
+def plot_simple_LS_gross(port_grs, start=None, end=None, code='on'):
 	""" Plot a simplified graph, only LS gross only"""
 
 	ret_grs = port_grs['r_ls'].dropna()
@@ -486,7 +491,7 @@ def plot_simple_LS_gross(port_grs, start=None, end=None, full_day=False):
 	df['5y_avg_grs'] = df['r_grs'].rolling(60).mean() * 12
 
 	# Build up the graph of cumulative returns
-	if not full_day:
+	if code == 'on':
 		holding_code = "Overnight"
 		logy = True
 		box_text = ("Gross Return (L/S):  38.1%\n"
@@ -495,6 +500,16 @@ def plot_simple_LS_gross(port_grs, start=None, end=None, full_day=False):
 		            "Sharpe Ratio Gross (L/S):  2.8\n"
 		            "Largest Drawdown:  10.9%\n"
 		            "t-Stat:  14.8")
+		legend_loc = 'best'
+	elif code == 'intra':
+		holding_code = "Intraday"
+		logy = True
+		# box_text = ("Gross Return (L/S):  38.1%\n"
+		#             "Long:  +27.2% / Short:  +7.9%\n"
+		#             "Standard Deviation (L/S):  10.9%\n"
+		#             "Sharpe Ratio Gross (L/S):  2.8\n"
+		#             "Largest Drawdown:  10.9%\n"
+		#             "t-Stat:  14.8")
 		legend_loc = 'best'
 	else:
 		holding_code = "Full Day"
@@ -511,7 +526,7 @@ def plot_simple_LS_gross(port_grs, start=None, end=None, full_day=False):
 
 	ax = df['cum_grs'].plot(logy=logy, fontsize='small', grid=True)
 
-	title_string = (f"Value of $1 Invested - 1995-2022- Holding {holding_code}"
+	title_string = (f"Value of $1 Invested - 1995-2024- Holding {holding_code}"
 	                f"\nLong/Short Portfolios based on Trailing {sim['window']}m [O/N-Intraday] Quintiles")
 
 	ax.set_title(title_string, fontsize=10)
@@ -534,7 +549,7 @@ def plot_simple_LS_gross(port_grs, start=None, end=None, full_day=False):
 	years = (df.index[-1] - df.index[0]) / timedelta(days=365.25)
 	grs_avg_ret = df['cum_grs'][-1] ** (1 / years) - 1
 
-	title_string = (f"Rolling 5y Annual Returns - 1995-2022- Holding {holding_code}"
+	title_string = (f"Rolling 5y Annual Returns - 1995-2024- Holding {holding_code}"
 	                f"\nLong/Short Portfolios based on Trailing {sim['window']}m [O/N-Intraday] Quintiles")
 
 	# linestyles  = [':','-']
@@ -622,7 +637,7 @@ def gen_summary_report():
 			# Increment row counter
 			i += 1
 
-			# Add rows for the index buy and hold returns
+	# Add rows for the index buy and hold returns
 	for j in [0, 2]:
 		frame, period = frames[j], periods[j]
 
@@ -644,7 +659,7 @@ def gen_summary_report():
 		# Increment row counter
 		i += 1
 
-		# Populate the Costs (Gross/Net) column
+	# Populate the Costs (Gross/Net) column
 	df_stats['Costs'] = "Gross" if sim['gross'] else "Net"
 
 	# Print results
@@ -689,7 +704,7 @@ def gen_table_for_paper():
 			# Increment row counter
 			i += 1
 
-			# Add rows for the index buy and hold returns
+	# Add rows for the index buy and hold returns
 	for j in [0, 2, 4]:
 		frame, period = frames[j], periods[j]
 
@@ -711,7 +726,7 @@ def gen_table_for_paper():
 		# Increment row counter
 		i += 1
 
-		# Populate the Costs (Gross/Net) column
+	# Populate the Costs (Gross/Net) column
 	df_stats['Costs'] = "Gross" if sim['gross'] else "Net"
 
 	# Print results
@@ -821,23 +836,22 @@ if __name__ == "__main__":
 	# Calculate portfolio monthly and cumulative returns, with and w/o trans costs
 	port_o, port_o_net = calc_portfolio_returns(positions, df_o, df_f, riskfree, sim)
 	port_i, port_i_net = calc_portfolio_returns(-positions, df_i, df_f, riskfree, sim, intra=True)
-	port_f, port_f_net = calc_portfolio_returns(positions, df_f, df_f, riskfree, sim)
+	port_f, port_f_net = (1 + port_o) * (1 + port_i) - 1, (1 + port_o_net) * (1 + port_i_net) - 1
 
 	# %% Plot returns for the overnight holding strategy
 	use_log = False
 	costs = "Gross" if sim['gross'] else "Net"
 
-	if costs == "Net":
-		port_o_used = port_o_net
-		port_i_used = port_i_net
-	else:
-		port_o_used = port_o
-		port_i_used = port_i
+	port_o_used = port_o_net if costs == "Net" else port_o
+	port_i_used = port_i_net if costs == "Net" else port_i
+	port_f_used = port_f_net if costs == "Net" else port_f
 
 	# Before 2015
 	r_o_pre = plot_sim_returns(port_o_used, end='2015-01-01', title_codes=['Overnight', costs, '1995-2015'],
 	                           use_log=use_log)
 	r_i_pre = plot_sim_returns(port_i_used, end='2015-01-01', title_codes=['Intraday', costs, '1995-2015'],
+	                           use_log=use_log)
+	r_f_pre = plot_sim_returns(port_f_used, end='2015-01-01', title_codes=['Full day', costs, '1995-2015'],
 	                           use_log=use_log)
 
 	# After 2015
@@ -845,44 +859,71 @@ if __name__ == "__main__":
 	                            use_log=use_log)
 	r_i_post = plot_sim_returns(port_i_used, start='2015-01-01', title_codes=['Intraday', costs, '2015-2024'],
 	                            use_log=use_log)
+	r_f_post = plot_sim_returns(port_f_used, start='2015-01-01', title_codes=['Full day', costs, '2015-2024'],
+	                            use_log=use_log)
+
+	# Last 2 years
+	# r_o_post22 = plot_sim_returns(port_o_used, start='2022-05-01', title_codes=['Overnight', costs, '2022-2024'],
+	#                               use_log=use_log, logy=False)
+	# r_i_post22 = plot_sim_returns(port_i_used, start='2022-05-01', title_codes=['Intraday', costs, '2022-2024'],
+	#                               use_log=use_log, logy=False)
+	# r_f_post22 = plot_sim_returns(port_f_used, start='2022-05-01', title_codes=['Full day', costs, '2022-2024'],
+	#                               use_log=use_log, logy=False)
+
+	# This year
+	r_o_24 = plot_sim_returns(port_o_used, start='2023-12-31', title_codes=['Overnight', costs, '12/31/23-5/15/24'],
+	                          use_log=use_log, logy=False)
+	r_i_24 = plot_sim_returns(port_i_used, start='2023-12-31', title_codes=['Intraday', costs, '12/31/23-5/15/24'],
+	                          use_log=use_log, logy=False)
+	r_f_22 = plot_sim_returns(port_f_used, start='2023-12-31', title_codes=['Full day', costs, '12/31/23-5/15/24'],
+	                          use_log=use_log, logy=False)
 
 	# Customizer plot for the paper
 	report_for_paper = True
 	if report_for_paper:
-		r_o_full = plot_for_paper(port_o_used, title_codes=['Overnight', costs, '1995-2022'], use_log=use_log)
-		r_i_full = plot_for_paper(port_i_used, title_codes=['Intraday', costs, '1995-2022'], use_log=use_log)
+		r_o_full = plot_for_paper(port_o_used, title_codes=['Overnight', costs, '1995-2024'], use_log=use_log)
+		r_i_full = plot_for_paper(port_i_used, title_codes=['Intraday', costs, '1995-2024'], use_log=use_log)
+		r_f_full = plot_for_paper(port_f_used, title_codes=['Full day', costs, '1995-2024'], use_log=use_log)
 
-		# %% Analyze the cumulative return time series
+	# %% Analyze the cumulative return time series
 	if report_for_paper:
+		print("\nFull table for the paper:")
 		df_stats = gen_table_for_paper()
 		fname = "df_stats_paper.p"
 	else:
+		print("\nSummary report:")
 		df_stats = gen_summary_report()
 		fname = "df_paper.p"
 
 	# %% Generate a simple table for the paper
 	use_net = False
+	print("\nSimple table for the paper -- overnight:")
 	if use_net:
-		df_simple_plot = plot_simple_LS(port_o, port_o_net)
-		df_simple = gen_simple_table(port_o, port_o_net)
-		print(df_simple)
+		df_o_simple_plot = plot_simple_LS(port_o, port_o_net, code='on')
+		df_o_simple = gen_simple_table(port_o, port_o_net)
 	else:
-		df_simple_plot = plot_simple_LS_gross(port_o, port_o_net)
-		# df_simple_plot.to_clipboard()
-		df_simple = gen_simple_table(port_o, port_o_net, use_net=False)
-		print(df_simple)
+		df_o_simple_plot = plot_simple_LS_gross(port_o, port_o_net, code='on')
+		df_o_simple = gen_simple_table(port_o, port_o_net, use_net=False)
+	print(df_o_simple)
+
+	print("\nSimple table for the paper -- intraday:")
+	if use_net:
+		df_i_simple_plot = plot_simple_LS(port_i, port_i_net, code='intra')
+		df_i_simple = gen_simple_table(port_i, port_i_net)
+	else:
+		df_i_simple_plot = plot_simple_LS_gross(port_i, port_i_net, code='intra')
+		df_i_simple = gen_simple_table(port_i, port_i_net, use_net=False)
+	print(df_i_simple)
 
 	# %% Now run analysis for the full day:
-	use_net = False
+	print("\nSimple table for the paper -- Full day:")
 	if use_net:
-		df_simple_plot_f = plot_simple_LS(port_f, port_f_net, full_day=True)
-		df_simple_f = gen_simple_table(port_f, port_f_net)
-		print(df_simple_f)
+		df_f_simple_plot = plot_simple_LS(port_f, port_f_net, code='full')
+		df_f_simple = gen_simple_table(port_f, port_f_net)
 	else:
-		df_simple_plot_f = plot_simple_LS_gross(port_f, port_f_net, full_day=True)
-		# df_simple_plot.to_clipboard()
-		df_simple_f = gen_simple_table(port_f, port_f_net, use_net=False)
-		print(df_simple_f)
+		df_f_simple_plot = plot_simple_LS_gross(port_f, port_f_net, code='full')
+		df_f_simple = gen_simple_table(port_f, port_f_net, use_net=False)
+	print(df_f_simple)
 
 	# %% Save structures to pickle files
 	# pickle_dir = '../data'

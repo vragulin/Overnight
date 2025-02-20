@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Created on Fri Jun  3 09:41:46 2022
@@ -15,7 +16,7 @@ import calc_adj_close as cac
 import config as cf
 
 #%% Generate a series of market cap data
-def gen_mkt_cap_hist(prices, shs_out):
+def gen_mkt_cap_hist(prices, shs_out, method='near'):
     """
     Generates a periodic (D/M/Q) series of market caps using the following logic:
      * for every date t take the nearest to t (on ref_date) number of shares.
@@ -25,6 +26,10 @@ def gen_mkt_cap_hist(prices, shs_out):
     ----------
     prices : dataframe with periodic (D/M/Q etc.) historices of Closing and Split-Adj closing prices
     shs_out : dataframe with numbers of shares outstanding on different reporting dates
+    method : how we calculate the share count between dates
+                * near  - use the nearest report date (default) 
+                * prior - use the closest prior report date (+ backfill before the 1st report)
+                * interp - interpolate between the prior and trailing report dates (+backfill before the 1st report)
 
     Returns
     -------
@@ -44,8 +49,29 @@ def gen_mkt_cap_hist(prices, shs_out):
     shs_out1 = pd.merge_asof(shs_out, prices, left_index=True, right_index=True, direction='nearest')
     
     # Merge sh_out with prices, match by nearest date
-    df = pd.merge_asof(prices, shs_out1[['shrsOut','Close','Split Adj Close','Ref Date']], 
-                       left_index=True, right_index=True, direction='nearest', suffixes=[""," ref date"])
+    if method == 'near':
+        df = pd.merge_asof(prices, shs_out1[['shrsOut','Close','Split Adj Close','Ref Date']], 
+                           left_index=True, right_index=True, direction='nearest', suffixes=[""," ref date"])
+    elif method == 'prior':
+        df = pd.merge_asof(prices, shs_out1[['shrsOut','Close','Split Adj Close','Ref Date']], 
+                           left_index=True, right_index=True, suffixes=[""," ref date"])
+
+    elif method == 'interp':
+        # Interpolate the data frame with # of shares outstanding to trading date frequency
+        tdays = pd.read_pickle(os.path.join(cf.DATA_DIR,"trading_days.pickle"))
+        shs_out2 = shs_out.reindex(index=tdays['Date'])
+        shs_out2['shrsOut'] = shs_out2['shrsOut'].interpolate(limit_direction='both')
+        shs_out2['Ref Date'] = shs_out2.index
+
+        # Merge prices and # of shares 
+        df = pd.merge(prices, shs_out2, left_index=True, right_index=True)
+        
+        # Add 'ref date' columns to keep the same format as other methods, they are just copies of price df columns
+        df['Close ref date']           = df['Close']
+        df['Split Adj Close ref date'] = df['Split Adj Close']
+        
+    else:
+        raise ValueError(f"Incorrect method: {method}")
     
     # Calculate market cap and drop unneeded columns
     # df['Mkt Cap'] = df['shrsOut'] * df['Close ref date'] / df['Split Adj Close ref date'] \
@@ -55,7 +81,7 @@ def gen_mkt_cap_hist(prices, shs_out):
     return df
 
 #%% Process data from different files for one stock
-def process_one_stock(ticker):
+def process_one_stock(ticker, method='near'):
     """ Load stock data from csv files.  
         Clean out bad data
         Create all series necessary for analysis (e.g. market cap)
@@ -100,19 +126,29 @@ def process_one_stock(ticker):
     # =============================================================================
     # Need to write a function to generate a historical series of market caps!!!
     # =============================================================================
-    df_out = gen_mkt_cap_hist(df, df_shs_out)
+    df_out = gen_mkt_cap_hist(df, df_shs_out, method=method)
     
     return df_out
     
 #%% Entry Point
 if __name__ == "__main__":
     
+    # Specity how we interpolate the number of shares ahead of report dates
+    # Possible values: 'near' (default), 'prior', 'interp'.
+    method = 'interp'
+    
     # Ensure that the directory for data files exists
     if not os.path.exists(cf.MERGED_DIR):
         os.makedirs(cf.MERGED_DIR)
         
     # Loop over all stocks for which we have annual reports (i.e. shrsOutstanding data)
-    for i, file in enumerate(os.listdir(cf.SHRS_OUT_DIR)): #enumerate(['CIT.csv']):
+    for i, file in enumerate(os.listdir(cf.SHRS_OUT_DIR)): #enumerate(['MA.csv']): 
+        
+        # Check if it's an old version with a _ in the filename
+        if '_' in file:  
+            continue
+        
+        # If it's a current version - continue processing
         ticker = os.path.splitext(file)[0]
 
         # Check if ticker has already been processed
@@ -123,7 +159,7 @@ if __name__ == "__main__":
         else:        
             # Process the ticker
             print(f'{i} : {ticker}')
-            df = process_one_stock(ticker)
+            df = process_one_stock(ticker, method=method)
             try:
                 df.to_csv(dest_file)
             except AttributeError as e:

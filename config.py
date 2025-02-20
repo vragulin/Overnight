@@ -20,7 +20,9 @@ SPLIT_DIR    = "../split_dfs"
 STOCK_DIR    = "../stock_dfs"
 DIV_DIR      = "../div_dfs"
 SHRS_OUT_DIR = "../shrs_dfs"
-MERGED_DIR   = "../merged_dfs"
+#MERGED_DIR   = "../merged_dfs"  #Calc mcap using nShares from the closest prior report
+#MERGED_DIR   = "../merged_prior_dfs"  #Calc mkap using nShares from most recent prior report
+MERGED_DIR   = "../merged_intrp_dfs"  #Calc mkap using nShares interpolating between 2 surrounding reports
 HSTAT_DIR    = "../hist_stats"
 SIM_STK_DIR = "../sim_stk_dfs"
 

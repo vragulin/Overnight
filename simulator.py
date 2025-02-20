@@ -34,7 +34,7 @@ def init_sim_params():
     params = {}
     params['rebuild'      ] = True    #Regenerate stock return files
     params['window'       ] = 24       #window in months for the return calculation
-    params['trx_costs'    ] = 1        #one-way trading costs in bp
+    params['trx_costs'    ] = 0        #one-way trading costs in bp
     params['borrow_fee'   ] = 25       #borrow fee on the shorts, in bp per annum
     params['capital'      ] = 1        #initial capital
     params['trade_pctiles'] = [20, 80] #Sell and buy  thresholds for shorts/longs portfolios
@@ -445,8 +445,8 @@ def plot_simple_LS(port_grs, port_net, start = None, end=None):
                 "Sharpe Ratio Net: 2.65\n"
                 "Largest Drawdown: 5.3%\n"
                 "t-Stat: 13.9")
-    ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
-            bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
+    # ax.text(dt.datetime(2019,1,1), 1, box_text, fontsize='small',
+    #         bbox=dict(facecolor='white',edgecolor='none'),horizontalalignment='right') 
     
     plt.show()
     
@@ -790,6 +790,7 @@ if __name__ == "__main__":
     
     # Calculate the sorting parameter, for now just use (o/n - intra) window, later can do opb as in Lachance
     df_obp = (df_o-df_i).rolling(sim['window']).sum()
+    # df_obp = (df_o-df_i).rolling(sim['window']).sum().shift(1) - if we lag entry by 1mo 
     
     # Generate positions and thresholds used for long and short portfolio cutoffs
     positions, _  = gen_positions(df_obp, sim) 
@@ -835,7 +836,7 @@ if __name__ == "__main__":
 
     
     #%% Generate a simple table for the paper
-    use_net = True
+    use_net = False
     if use_net:
         df_simple_plot = plot_simple_LS(port_o, port_o_net)
         df_simple = gen_simple_table(port_o, port_o_net)

@@ -47,8 +47,7 @@ def test_load_Elm_tickers():
     tickers = load_Elm_tickers(reload=True)
     print(tickers[:5], tickers[-5:])
     
-    
-    
+
     # Load tickers from pickle
     tickers = None
     tickers = load_Elm_tickers(reload=False)
@@ -97,10 +96,11 @@ def compile_data():
     main_df.to_pickle(os.path.join(cf.DATA_DIR, ALL_STOCKS_DFS))
         
     return main_df
+
 #%% Main program 
 def main():
     
-    test_load_tickers = False
+    test_load_tickers = True
     if test_load_tickers:
         test_load_Elm_tickers()
     

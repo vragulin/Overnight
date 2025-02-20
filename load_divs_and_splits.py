@@ -18,6 +18,7 @@ import load_data_into_df as ld
 
 # My config file with API Keys
 import config
+import datetime as dt
 
 #%% Global Variables
 EOD_HISTORICAL_DATA_API_KEY_DEFAULT = config.EOD_API_KEY
@@ -45,17 +46,19 @@ def get_splits(symbol, exchange, start=None, end=None,
     }
     r = session.get(url, params=params)
     if r.status_code == requests.codes.ok:
-        df = pd.read_csv(StringIO(r.text), skipfooter=1,
-                         parse_dates=[0], index_col=0, engine='python')
+        # df = pd.read_csv(StringIO(r.text), skipfooter=1,
+        df = pd.read_csv(StringIO(r.text), 
+                          parse_dates=[0], index_col=0, engine='python')
+        
         assert len(df.columns) == 1
         ts = df["Stock Splits"]
         return ts
     else:
-        params["api_token"] = "YOUR_HIDDEN_API"
+        params["api_token"] = config.EOD_API_KEY
         raise RemoteDataError(r.status_code, r.reason, _url(url, params))
 
-#%% Get splits nad dividends and save into the data directories
-def get_divs_and_tickers_from_eodhist(tickers, start=None, end=None):
+#%% Get splits and dividends and save into the data directories
+def get_divs_and_splits_from_eodhist(tickers, start=None, end=None):
     """ Load Market Cap history from eodhist API for all tickers on the list.
         Save data into files in the respective directories """
    
@@ -113,10 +116,10 @@ if __name__ == "__main__":
 
     # get divs and for all tickers
     start = "1993-01-01"
-    end   = "2022-06-01"
+    end   = dt.datetime.now().strftime('%Y-%m-%d')
 
-    get_divs_and_tickers_from_eodhist(tickers)
-    #get_divs_and_tickers_from_eodhist(["AANI"])
+    get_divs_and_splits_from_eodhist(tickers)
+    #get_divs_and_splits_from_eodhist(["AAPL"])
     
     
     # From number of shares and share prcies generate series of market cap proxies
